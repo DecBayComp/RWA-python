@@ -1,0 +1,14 @@
+# Python
+*.py[cod]
+__pycache__/
+
+# Package
+*.egg
+*.egg-info/
+dist/
+build/
+_build/
+
+# anything hidden should be manually added
+.*
+

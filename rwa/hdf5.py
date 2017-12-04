@@ -86,24 +86,34 @@ def copy_hdf(from_table, to_table, name):
 	from_table.copy(from_table, to_table, name=name)
 
 def peek_Pandas(service, from_table):
-	_, tmpfilename = tempfile.mkstemp()
-	to_table = h5py.File(tmpfilename, 'w', libver='latest')
-	copy_hdf(from_table['root'], to_table, 'root')
-	to_table.close()
-	table = read_hdf(tmpfilename, 'root')
-	os.remove(tmpfilename)
+	fd, tmpfilename = tempfile.mkstemp()
+	os.close(fd)
+	try:
+		to_table = h5py.File(tmpfilename, 'w')
+		try:
+			copy_hdf(from_table['root'], to_table, 'root')
+		finally:
+			to_table.close()
+		table = read_hdf(tmpfilename, 'root')
+	finally:
+		os.unlink(tmpfilename)
 	return table
 
 def poke_Pandas(service, objname, obj, to_table):
-	_, tmpfilename = tempfile.mkstemp()
+	fd, tmpfilename = tempfile.mkstemp()
+	os.close(fd)
 	try:
 		obj.to_hdf(tmpfilename, 'root')
 		from_table = h5py.File(tmpfilename, 'r', libver='latest')
-		copy_hdf(from_table, to_table, objname)
+		try:
+			copy_hdf(from_table, to_table, objname)
+		finally:
+			from_table.close()
 	except ImportError as e:
 		import warnings
 		warnings.warn(e.msg, ImportWarning)
-	os.remove(tmpfilename)
+	finally:
+		os.unlink(tmpfilename)
 	#_debug(to_table.file)
 
 
