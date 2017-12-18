@@ -36,13 +36,13 @@ else:
 to_attr = string_
 from_attr = from_bytes
 
-def native_poke(service, objname, obj, container):
+def native_poke(service, objname, obj, container, visited=None):
 	container.create_dataset(objname, data=obj)
 
-def string_poke(service, objname, obj, container):
+def string_poke(service, objname, obj, container, visited=None):
 	container.create_dataset(objname, data=string_(obj))
 
-def vlen_poke(service, objname, obj, container):
+def vlen_poke(service, objname, obj, container, visited=None):
 	dt = h5py.special_dtype(vlen=type(obj))
 	container.create_dataset(objname, data=obj, dtype=dt)
 
@@ -57,7 +57,7 @@ def text_peek(service, container):
 	
 
 def mk_vlen_poke(f):
-	def poke(service, objname, obj, container):
+	def poke(service, objname, obj, container, visited=None):
 		obj = f(obj)
 		dt = h5py.special_dtype(vlen=type(obj))
 		container.create_dataset(objname, data=obj, dtype=dt)
@@ -99,7 +99,7 @@ def peek_Pandas(service, from_table):
 		os.unlink(tmpfilename)
 	return table
 
-def poke_Pandas(service, objname, obj, to_table):
+def poke_Pandas(service, objname, obj, to_table, visited=None):
 	fd, tmpfilename = tempfile.mkstemp()
 	os.close(fd)
 	try:
@@ -149,7 +149,7 @@ def hdf5_storable(storable, **kwargs):
 
 
 class HDF5Store(GenericStore):
-	__slots__ = GenericStore.__slots__ + ['store']
+	__slots__ = ('store',)
 
 	def __init__(self, resource, mode='auto', verbose=False):
 		GenericStore.__init__(self, hdf5_service)
@@ -199,10 +199,10 @@ class HDF5Store(GenericStore):
 		record.attrs.create(attr, to_attr(val))
 		#print(('hdf5.setRecordAttr', record.name, attr, record.attrs[attr])) # DEBUG
 
-	def poke(self, objname, obj, container=None):
+	def poke(self, objname, obj, container=None, visited=None):
 		if container is None:
 			container = self.store
-		GenericStore.poke(self, objname, obj, container)
+		GenericStore.poke(self, objname, obj, container, visited=visited)
 
 	def pokeNative(self, objname, obj, container):
 		if obj is not None:
@@ -212,6 +212,10 @@ class HDF5Store(GenericStore):
 				#try: self.pokeStorable(default_storable(obj), objname, obj, container)
 				raise TypeError('unsupported type {!s} for object {}'.format(\
 					obj.__class__, objname))
+
+	def pokeVisited(self, objname, obj, container, existing, visited=None):
+		existing_container, existing_objname = existing
+		container[objname] = existing_container[existing_objname] # HDF5 hard link
 
 	def peek(self, objname, record=None):
 		if record is None:

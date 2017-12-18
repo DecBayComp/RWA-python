@@ -9,9 +9,19 @@ import numpy
 import pandas
 
 
+strtypes = (str, bytes)
+try: # Py2
+	strtypes = strtypes + (unicode,)
+except NameError: # Py3
+	pass
+basetypes = (bool, int, float) + strtypes
+
+def isreference(a): # BUG!
+	return False#not isinstance(a, basetypes)
+
+
 class GenericStore(StoreBase):
-	__slots__ = StoreBase.__slots__
-	__slots__.append('verbose')
+	__slots__ = ('verbose',)
 
 	def registerStorable(self, storable):
 		if not storable.handlers:
@@ -43,9 +53,9 @@ class GenericStore(StoreBase):
 	def pokeNative(self, objname, obj, container):
 		raise TypeError('record not supported')
 
-	def pokeStorable(self, storable, objname, obj, container):
+	def pokeStorable(self, storable, objname, obj, container, visited=None):
 		#print((objname, storable.storable_type)) # debug
-		storable.poke(self, objname, obj, container)
+		storable.poke(self, objname, obj, container, visited=visited)
 		try:
 			record = self.getRecord(objname, container)
 			self.setRecordAttr('type', storable.storable_type, record)
@@ -53,9 +63,22 @@ class GenericStore(StoreBase):
 				self.setRecordAttr('version', from_version(storable.version), record)
 		except KeyError:
 			# fake storable; silently skip
-			pass
+			if self.verbose:
+				print("skipping `{}` (type: {})".format(objname, storable.storable_type))
+				if 1 < self.verbose:
+					import traceback
+					print(traceback.format_exc())
 
-	def poke(self, objname, obj, record):
+	def pokeVisited(self, objname, obj, record, existing, visited=None):
+		if self.hasPythonType(obj):
+			storable = self.byPythonType(obj).asVersion()
+			self.pokeStorable(storable, objname, obj, record, visited=visited)
+		else:
+			self.pokeNative(objname, obj, record)
+
+	def poke(self, objname, obj, record, visited=None):
+		if visited is None:
+			visited = dict()
 		if self.verbose:
 			if self.hasPythonType(obj):
 				typetype = 'storable'
@@ -63,9 +86,14 @@ class GenericStore(StoreBase):
 			print('writing `{}` ({} type: {})'.format(objname, typetype, type(obj).__name__))
 		if obj is not None:
 			objname = self.formatRecordName(objname)
+			if isreference(obj):
+				if id(obj) in visited:
+					return self.pokeVisited(objname, obj, record, \
+						visited[id(obj)], visited=visited)
+				visited[id(obj)] = (record, objname)
 			if self.hasPythonType(obj):
 				storable = self.byPythonType(obj).asVersion()
-				self.pokeStorable(storable, objname, obj, record)
+				self.pokeStorable(storable, objname, obj, record, visited=visited)
 			else:
 				self.pokeNative(objname, obj, record)
 
@@ -91,40 +119,43 @@ class GenericStore(StoreBase):
 
 # pokes
 def poke(exposes):
-	def _poke(store, objname, obj, container):
+	def _poke(store, objname, obj, container, visited=None):
 		try:
 			sub_container = store.newContainer(objname, obj, container)
 		except:
 			raise ValueError('generic poke not supported by store')
 		for iobjname in exposes:
 			iobj = getattr(obj, iobjname)
-			store.poke(iobjname, iobj, sub_container)
+			store.poke(iobjname, iobj, sub_container, visited=visited)
 	return _poke
 
-def poke_assoc(store, objname, assoc, container):
+def poke_assoc(store, objname, assoc, container, visited=None):
 	try:
 		sub_container = store.newContainer(objname, assoc, container)
 	except:
 		raise ValueError('generic poke not supported by store')
-	verbose = store.verbose
+	escape_keys = assoc and not all(isinstance(iobjname, strtypes) for iobjname,_ in assoc)
 	reported_item_counter = 0
 	escaped_key_counter = 0
 	try:
-		for iobjname, iobj in assoc:
-			if isinstance(iobjname, str) or isinstance(iobjname, bytes):
-				store.poke(iobjname, iobj, sub_container)
-			else: # escape key
-				store.poke(str(escaped_key_counter), (iobjname, iobj), sub_container)
-				store.setRecordAttr('key', 'escaped', sub_container)
+		if escape_keys:
+			store.setRecordAttr('key', 'escaped', sub_container)
+			verbose = store.verbose # save state
+			for obj in assoc:
+				store.poke(str(escaped_key_counter), obj, sub_container, \
+					visited=visited)
 				escaped_key_counter += 1
-			if store.verbose:
-				reported_item_counter += 1
-				if reported_item_counter == 9:
-					store.verbose = False
-					print('...')
+				if store.verbose:
+					reported_item_counter += 1
+					if reported_item_counter == 9:
+						store.verbose = False
+						print('...')
+			store.verbose = verbose # restore state
+		else:
+			for iobjname, iobj in assoc:
+				store.poke(iobjname, iobj, sub_container, visited=visited)
 	except TypeError as e:
 		raise TypeError("wrong type for keys in associative list\n\t{}".format(e.args[0]))
-	store.verbose = verbose
 
 
 # peeks
@@ -236,18 +267,28 @@ def seq_to_assoc(seq):
 def assoc_to_list(assoc):
 	return [ x for _, x in sorted(assoc, key=lambda a: int(a[0])) ]
 
-def poke_seq(v, n, s, c):
-	poke_assoc(v, n, seq_to_assoc(s), c)
-def poke_dict(v, n, d, c):
-	poke_assoc(v, n, d.items(), c)
-def poke_OrderedDict(v, n, d, c):
-	poke_dict(v, n, d, c)
+def poke_seq(v, n, s, c, visited=None):
+	poke_assoc(v, n, seq_to_assoc(s), c, visited=visited)
+def poke_dict(v, n, d, c, visited=None):
+	poke_assoc(v, n, d.items(), c, visited=visited)
 def peek_list(s, c):
 	return assoc_to_list(peek_assoc(s, c))
 def peek_tuple(s, c):
 	return tuple(peek_list(s, c))
+def peek_set(s, c):
+	return set(peek_list(s, c))
+def peek_frozenset(s, c):
+	return frozenset(peek_list(s, c))
 def peek_dict(s, c):
-	return dict(peek_assoc(s, c))
+	items = peek_assoc(s, c)
+	if items:
+		if not all([ len(i) == 2 for i in items ]):
+			print(items)
+			raise ValueError('missing keys')
+		if len(set(k for k,_ in items)) < len(items):
+			print(items)
+			raise ValueError('duplicate keys')
+	return dict(items)
 def peek_deque(s, c):
 	return deque(peek_list(s, c))
 def peek_OrderedDict(s, c):
@@ -255,9 +296,11 @@ def peek_OrderedDict(s, c):
 
 seq_storables = [Storable(tuple, handlers=StorableHandler(poke=poke_seq, peek=peek_tuple)), \
 	Storable(list, handlers=StorableHandler(poke=poke_seq, peek=peek_list)), \
+	Storable(frozenset, handlers=StorableHandler(poke=poke_seq, peek=peek_frozenset)), \
+	Storable(set, handlers=StorableHandler(poke=poke_seq, peek=peek_set)), \
 	Storable(dict, handlers=StorableHandler(poke=poke_dict, peek=peek_dict)), \
 	Storable(deque, handlers=StorableHandler(poke=poke_seq, peek=peek_deque)), \
-	Storable(OrderedDict, handlers=StorableHandler(poke=poke_OrderedDict, peek=peek_OrderedDict))]
+	Storable(OrderedDict, handlers=StorableHandler(poke=poke_dict, peek=peek_OrderedDict))]
 
 
 # functions (built-in and standard)
@@ -278,7 +321,7 @@ function_storables = [\
 
 
 def poke_native(getstate):
-	def poke(service, objname, obj, container):
+	def poke(service, objname, obj, container, visited=None):
 		service.pokeNative(objname, getstate(obj), container)
 	return poke
 
@@ -328,8 +371,8 @@ def dok_recommend(*vargs):
 	raise TypeErrorWithAlternative('dok_matrix', 'coo_matrix')
 dok_handler = StorableHandler(poke=dok_recommend, peek=dok_recommend)
 # now
-def dok_poke(service, matname, mat, container):
-	coo_handler.poke(service, matname, mat.tocoo(), container)
+def dok_poke(service, matname, mat, container, visited=None):
+	coo_handler.poke(service, matname, mat.tocoo(), container, visited=visited)
 def dok_peek(service, container):
 	return coo_handler.peek(service, container).todok()
 dok_handler = StorableHandler(poke=dok_poke, peek=dok_peek)
@@ -339,8 +382,8 @@ def lil_recommend(*vargs):
 	raise TypeErrorWithAlternative('lil_matrix', ('csr_matrix', 'csc_matrix'))
 lil_handler = StorableHandler(poke=lil_recommend, peek=lil_recommend)
 # now
-def lil_poke(service, matname, mat, container):
-	csr_handler.poke(service, matname, mat.tocsr(), container)
+def lil_poke(service, matname, mat, container, visited=None):
+	csr_handler.poke(service, matname, mat.tocsr(), container, visited=visited)
 def lil_peek(service, container):
 	return csr_handler.peek(service, container).tolil()
 lil_handler = StorableHandler(poke=lil_poke, peek=lil_peek)
@@ -355,8 +398,8 @@ sparse_storables = [Storable(bsr_matrix, handlers=bsr_handler), \
 	Storable(lil_matrix, handlers=lil_handler)]
 
 
-def poke_index(service, name, obj, container):
-	poke_seq(service, name, obj.tolist(), container)
+def poke_index(service, name, obj, container, visited=None):
+	poke_seq(service, name, obj.tolist(), container, visited=visited)
 def peek_index(service, container):
 	return pandas.Index(peek_list(service, container))
 

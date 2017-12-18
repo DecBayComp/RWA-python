@@ -9,7 +9,7 @@ class ConflictingVersionWarning(Warning):
 
 class StorableHandler(object):
 	'''Defines how to store an object of the class described by `Storable` `_parent`'''
-	__slots__ = ['version', 'exposes', 'poke', 'peek', '_parent']
+	__slots__ = ('version', 'exposes', 'poke', 'peek', '_parent')
 
 	@property
 	def python_type(self):
@@ -36,7 +36,7 @@ class StorableHandler(object):
 
 class Storable(object):
 	'''Describes a storable class'''
-	__slots__ = ['python_type', 'storable_type', '_handlers']
+	__slots__ = ('python_type', 'storable_type', '_handlers')
 
 	@property
 	def handlers(self):
@@ -76,7 +76,7 @@ class Storable(object):
 
 
 class StorableService(object):
-	__slots__ = ['by_python_type', 'by_storable_type'] # what about native_type?
+	__slots__ = ('by_python_type', 'by_storable_type') # what about native_type?
 
 	def __init__(self):
 		self.by_python_type = {}
@@ -161,7 +161,7 @@ class StorableService(object):
 
 class StoreBase(StorableService):
 	'''Proxy class to `StorableService` that defines two abstract methods to be implemented for each concrete store'''
-	__slots__ = ['storables']
+	__slots__ = ('storables',)
 
 	def __init__(self, storables):
 		self.storables = storables
@@ -192,7 +192,7 @@ class StoreBase(StorableService):
 	def peek(self, objname, container):
 		raise NotImplementedError('abstract method')
 
-	def poke(self, objname, obj, container):
+	def poke(self, objname, obj, container, visited=None):
 		raise NotImplementedError('abstract method')
 
 
