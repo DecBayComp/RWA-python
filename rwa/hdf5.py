@@ -26,12 +26,17 @@ if six.PY3:
 			return s
 		else:
 			return from_bytes(s)
+	def to_binary(s):
+		if isinstance(s, str):
+			s = s.encode('utf-8')
+		return string_(s)
 else:
 	import codecs
 	def from_unicode(s):
 		return codecs.unicode_escape_encode(s)[0]
 	def from_bytes(b): return b
 	to_str = str
+	to_binary = string_
 
 to_attr = string_
 from_attr = from_bytes
@@ -40,7 +45,7 @@ def native_poke(service, objname, obj, container, visited=None):
 	container.create_dataset(objname, data=obj)
 
 def string_poke(service, objname, obj, container, visited=None):
-	container.create_dataset(objname, data=string_(obj))
+	container.create_dataset(objname, data=to_binary(obj))
 
 def vlen_poke(service, objname, obj, container, visited=None):
 	dt = h5py.special_dtype(vlen=type(obj))
