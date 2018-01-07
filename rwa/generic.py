@@ -164,11 +164,11 @@ def default_peek(python_type, exposes):
 	make = python_type
 	try:
 		make()
-	except TypeError:
+	except: #TypeError:
 		make = lambda: python_type.__new__(python_type)
 		try:
 			make()
-		except TypeError:
+		except: #TypeError:
 			make = lambda args: python_type.__new__(python_type, *args)
 			with_args = True
 	if with_args:
