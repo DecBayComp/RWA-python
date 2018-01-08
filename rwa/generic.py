@@ -79,12 +79,13 @@ class GenericStore(StoreBase):
 	def poke(self, objname, obj, record, visited=None):
 		if visited is None:
 			visited = dict()
-		if self.verbose:
-			if self.hasPythonType(obj):
-				typetype = 'storable'
-			else:	typetype = 'native'
-			print('writing `{}` ({} type: {})'.format(objname, typetype, type(obj).__name__))
 		if obj is not None:
+			if self.verbose:
+				if self.hasPythonType(obj):
+					typetype = 'storable'
+				else:	typetype = 'native'
+				print('writing `{}` ({} type: {})'.format(objname, \
+					typetype, type(obj).__name__))
 			objname = self.formatRecordName(objname)
 			if isreference(obj):
 				if id(obj) in visited:
@@ -155,7 +156,11 @@ def poke_assoc(store, objname, assoc, container, visited=None):
 			for iobjname, iobj in assoc:
 				store.poke(iobjname, iobj, sub_container, visited=visited)
 	except TypeError as e:
-		raise TypeError("wrong type for keys in associative list\n\t{}".format(e.args[0]))
+		msg = 'wrong type for keys in associative list'
+		if e.args[0].startswith(msg):
+			raise
+		else:
+			raise TypeError("{}:\n\t{}".format(msg, e.args[0]))
 
 
 # peeks
@@ -315,9 +320,26 @@ def fail_peek(unsupported_type):
 		return f
 	return peek
 
-function_storables = [\
-	Storable(len.__class__, handlers=StorableHandler(poke=fake_poke, peek=fail_peek)), \
-	Storable(poke.__class__, handlers=StorableHandler(poke=fake_poke, peek=fail_peek))]
+
+class _Class(object):
+	__slots__ = ('member_descriptor',)
+	@property
+	def property(self):
+		pass
+	def instancemethod(self):
+		pass
+
+fake_handler = StorableHandler(poke=fake_poke, peek=fail_peek)
+function_storables = [ Storable(_type, handlers=fake_handler) for _type in frozenset(( \
+		type, \
+		type(len), \
+		type(lambda a: a), \
+		type(_Class.member_descriptor), \
+		type(_Class.property), \
+		type(_Class.instancemethod), \
+		type(_Class.__init__), \
+		type(_Class().__init__), \
+	)) ]
 
 
 def poke_native(getstate):
