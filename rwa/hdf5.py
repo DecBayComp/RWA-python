@@ -147,10 +147,17 @@ hdf5_service = StorableService()
 for s in hdf5_storables:
 	hdf5_service.registerStorable(s)
 
-def hdf5_storable(storable, **kwargs):
+def hdf5_storable(type_or_storable, *args, **kwargs):
 	'''Registers a `Storable` instance in the global service.'''
-	hdf5_service.registerStorable(storable, **kwargs)
+	if not isinstance(type_or_storable, Storable):
+		type_or_storable = default_storable(type_or_storable)
+	hdf5_service.registerStorable(type_or_storable, *args, **kwargs)
 
+def hdf5_not_storable(_type, *args, **kwargs):
+	hdf5_service.registerStorable(not_storable(_type), *args, **kwargs)
+
+
+hdf5_agnostic_modules = []
 
 
 class HDF5Store(GenericStore):
@@ -237,4 +244,29 @@ class HDF5Store(GenericStore):
 			#try: self.peekStorable(default_storable(??), container)
 			raise AttributeError('hdf5.peekNative', record.name, *e.args)
 
+	def isNativeType(self, obj):
+		return None # don't know; should `tryPokeAny` instead
+
+	def tryPokeAny(self, objname, obj, record, visited=None):
+		try:
+			self.pokeNative(objname, obj, record)
+		except (KeyboardInterrupt, SystemExit):
+			raise
+		except:
+			if six.PY2:
+				raise
+			_type = type(obj)
+			storable = self.defaultStorable(_type, agnostic=self.isAgnostic(_type))
+			self.pokeStorable(storable, objname, obj, record, visited=visited)
+
+	def isAgnostic(self, storable_type):
+		modules = []
+		path = ''
+		for submodule in storable_type.__module__.split('.'):
+			if path:
+				path = '.'.join((path, submodule))
+			else:
+				path = submodule
+			modules.append(path)
+		return any([ m in hdf5_agnostic_modules for m in modules ])
 

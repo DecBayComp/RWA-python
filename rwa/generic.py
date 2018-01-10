@@ -7,6 +7,9 @@ from scipy.sparse import bsr_matrix, coo_matrix, csc_matrix, csr_matrix, \
 import copy
 import numpy
 import pandas
+import warnings
+import traceback
+import importlib
 
 
 strtypes = (str, bytes)
@@ -50,6 +53,9 @@ class GenericStore(StoreBase):
 	def isStorable(self, record):
 		return self.getRecordAttr('type', record) is not None
 
+	def isNativeType(self, obj):
+		return True
+
 	def pokeNative(self, objname, obj, container):
 		raise TypeError('record not supported')
 
@@ -66,20 +72,27 @@ class GenericStore(StoreBase):
 			if self.verbose:
 				print("skipping `{}` (type: {})".format(objname, storable.storable_type))
 				if 1 < self.verbose:
-					import traceback
 					print(traceback.format_exc())
 
 	def pokeVisited(self, objname, obj, record, existing, visited=None):
 		if self.hasPythonType(obj):
-			storable = self.byPythonType(obj).asVersion()
+			storable = self.byPythonType(type(obj)).asVersion()
 			self.pokeStorable(storable, objname, obj, record, visited=visited)
 		else:
 			self.pokeNative(objname, obj, record)
 
 	def poke(self, objname, obj, record, visited=None):
 		if visited is None:
+			# `visited` is supposed to be a singleton 
+			# and should be initialized at the top `poke` call, 
+			# before it is passed to other namespaces
 			visited = dict()
-		if obj is not None:
+		if objname == '__dict__':
+			# expand the content of the `__dict__` dictionary
+			__dict__ = obj
+			for objname, obj in __dict__.items():
+				self.poke(objname, obj, record, visited=visited)
+		elif obj is not None:
 			if self.verbose:
 				if self.hasPythonType(obj):
 					typetype = 'storable'
@@ -93,10 +106,15 @@ class GenericStore(StoreBase):
 						visited[id(obj)], visited=visited)
 				visited[id(obj)] = (record, objname)
 			if self.hasPythonType(obj):
-				storable = self.byPythonType(obj).asVersion()
+				storable = self.byPythonType(type(obj)).asVersion()
 				self.pokeStorable(storable, objname, obj, record, visited=visited)
-			else:
+			elif self.isNativeType(obj):
 				self.pokeNative(objname, obj, record)
+			else:
+				self.tryPokeAny(objname, obj, record, visited=visited)
+
+	def tryPokeAny(self, objname, obj, record, visited=None):
+		raise NotImplementedError
 
 	def peekNative(self, record):
 		raise TypeError('record not supported')
@@ -109,13 +127,31 @@ class GenericStore(StoreBase):
 		if self.isStorable(record):
 			t = self.getRecordAttr('type', record)
 			v = self.getRecordAttr('version', record)
-			#print((objname, self.byStorableType(t).storable_type)) # debugging
-			storable = self.byStorableType(t).asVersion(v)
+			try:
+				#print((objname, self.byStorableType(t).storable_type)) # debugging
+				storable = self.byStorableType(t).asVersion(v)
+			except KeyError:
+				storable = self.defaultStorable(storable_type=t, version=to_version(v))
 			return self.peekStorable(storable, record)
 		else:
 			#print(objname) # debugging
 			return self.peekNative(record)
 
+	def defaultStorable(self, python_type=None, storable_type=None, version=None, **kwargs):
+		if python_type is None:
+			if storable_type.startswith('Python'):
+				_, module_name = storable_type.split('.', 1)
+			else:
+				module_name = storable_type
+			type_name, module_name = \
+				[ _name[::-1] for _name in module_name[::-1].split('.', 1) ]
+			module = importlib.import_module(module_name)
+			python_type = getattr(module, type_name)
+		if self.verbose:
+			print('generating storable instance for type: {}'.format(python_type))
+		self.storables.registerStorable(default_storable(python_type, \
+				version=version, storable_type=storable_type), **kwargs)
+		return self.byPythonType(python_type).asVersion(version)
 
 
 # pokes
@@ -126,8 +162,12 @@ def poke(exposes):
 		except:
 			raise ValueError('generic poke not supported by store')
 		for iobjname in exposes:
-			iobj = getattr(obj, iobjname)
-			store.poke(iobjname, iobj, sub_container, visited=visited)
+			try:
+				iobj = getattr(obj, iobjname)
+			except AttributeError:
+				pass
+			else:
+				store.poke(iobjname, iobj, sub_container, visited=visited)
 	return _poke
 
 def poke_assoc(store, objname, assoc, container, visited=None):
@@ -169,13 +209,15 @@ def default_peek(python_type, exposes):
 	make = python_type
 	try:
 		make()
-	except: #TypeError:
+	except:
 		make = lambda: python_type.__new__(python_type)
 		try:
 			make()
-		except: #TypeError:
+		except:
 			make = lambda args: python_type.__new__(python_type, *args)
 			with_args = True
+	def missing(attr):
+		return AttributeError("can't set attribute '{}' ({})".format(attr, python_type))
 	if with_args:
 		def peek(store, container):
 			state = []
@@ -186,6 +228,16 @@ def default_peek(python_type, exposes):
 				else:
 					state.append(None)
 			return make(state)
+	elif '__dict__' in exposes:
+		def peek(store, container):
+			obj = make()
+			for attr in container:
+				val = store.peek(attr, container)
+				try:
+					setattr(obj, attr, val)
+				except AttributeError:
+					raise missing(attr)
+			return obj
 	else:
 		def peek(store, container):
 			obj = make()
@@ -197,8 +249,8 @@ def default_peek(python_type, exposes):
 					val = None
 				try:
 					setattr(obj, attr, val)
-				except AttributeError as e:
-					raise AttributeError("can't set attribute '{}' ({})".format(attr, python_type))
+				except AttributeError:
+					raise missing(attr)
 			return obj
 	return peek
 
@@ -240,20 +292,125 @@ def peek_assoc(store, container):
 	return assoc
 
 
-# default storable with __new__ and __slots__
-def default_storable(python_type, exposes=None, version=None, storable_type=None):
-	if exposes is None:
+
+## routines for the automatic generation of storable instances for classes
+
+def most_exposes(python_type):
+	"""
+	Core engine for the automatic generation of storable instances.
+
+	Finds the attributes exposed by the objects of a given type.
+
+	Mostly Python3-only. 
+	Does not handle types which `__new__` method requires extra arguments either.
+
+	Arguments:
+
+		python_type (type): object type.
+
+	Returns:
+
+		list: attributes exposed.
+
+	"""
+	_exposes = set()
+	try:
+		# list all standard class attributes and methods:
+		do_not_expose = set(python_type.__dir__(object) + \
+			['__slots__', '__module__', '__weakref__']) # may raise `AttributeError`
+		empty = python_type.__new__(python_type) # may raise `TypeError`
+	except AttributeError: # Py2 does not have `__dir__`
 		try:
-			exposes = python_type.__slots__
+			_exposes = python_type.__slots__
+		except AttributeError:
+			pass
+	except TypeError: # `__new__` requires input arguments
+		for _workaround in storable_workarounds:
+			try:
+				_exposes = _workaround(python_type)
+			except (KeyboardInterrupt, SystemExit):
+				raise
+			except:
+				pass
+			else:
+				break
+	else:
+		# note that slots from parent classes are not in `__dict__` (like all slots)
+		# and - in principle - not in `__slots__` either.
+		all_members = empty.__dir__() # all slots are supposed to appear in this list
+		for attr in all_members:
+			if attr in do_not_expose:
+				# note that '__dict__' is in `do_not_expose` (comes from `object`)
+				continue
+			try: # identify the methods and properties
+				getattr(empty, attr)
+			except AttributeError as e: # then `attr` might be a slot
+				# properties can still throw an `AttributeError`;
+				# try to filter some more out
+				if e.args:
+					msg = e.args[0]
+					if msg == attr or msg.endswith("' object has no attribute '{}'".format(attr)):
+						_exposes.add(attr)
+			except:
+				pass
+		for attr in ('__dict__',):
+			if attr in all_members:
+				_exposes.add(attr)
+	return list(_exposes)
+
+def namedtuple_exposes(_type):
+	return _type._fields
+
+
+expose_extensions = []
+
+expose_extensions.append(most_exposes)
+
+expose_extensions.append(namedtuple_exposes)
+
+
+def default_storable(python_type, exposes=None, version=None, storable_type=None, peek=default_peek):
+	"""
+	Default mechanics for building the storable instance for a type.
+
+	Arguments:
+
+		python_type (type): type.
+
+		exposes (list): list of attributes exposed by the type.
+
+		version (tuple): version number.
+
+		storable_type (str): universal string identifier for the type.
+
+		peek (callable): peek routine.
+
+	Returns:
+
+		Storable: storable instance.
+
+	"""
+	_exposes = None
+	for extension in expose_extensions:
+		try:
+			_exposes = extension(python_type)
+		except (KeyboardInterrupt, SystemExit):
+			raise
 		except:
-			# take __dict__ and sort out the class methods
-			raise AttributeError('either define the `exposes` argument or the `__slots__` attribute for type: {!r}'.format(python_type))
+			pass
+		else:
+			if _exposes:
+				exposes = _exposes
+				break
+	if not exposes:
+		raise AttributeError('`exposes` required for type: {!r}'.format(python_type))
 	return Storable(python_type, key=storable_type, \
 		handlers=StorableHandler(version=version, exposes=exposes, \
-		poke=poke(exposes), peek=default_peek(python_type, exposes)))
+		poke=poke(exposes), peek=peek(python_type, exposes)))
 
 
 def kwarg_storable(python_type, exposes=None, version=None, storable_type=None, init=None, vargs=[]):
+	warnings.warn('kwarg_storable', DeprecationWarning)
 	if init is None:
 		init = python_type
 	if exposes is None:
@@ -308,17 +465,30 @@ seq_storables = [Storable(tuple, handlers=StorableHandler(poke=poke_seq, peek=pe
 	Storable(OrderedDict, handlers=StorableHandler(poke=poke_dict, peek=peek_OrderedDict))]
 
 
-# functions (built-in and standard)
+# helper for tagging unserializable types
 def fake_poke(*vargs, **kwargs):
 	pass
 def fail_peek(unsupported_type):
-	helper = "unsupported type '{}'\n; consider using `io.store.Functional` instead"
-	helper = helper.format(unsupported_type)
+	helper = "unserializable type '{}'\n".format(unsupported_type)
 	def peek(*vargs, **kwargs):
 		def f(*vargs, **kwargs):
 			raise TypeError(helper)
 		return f
 	return peek
+def not_storable(_type):
+	"""
+	Helper for tagging unserializable types.
+
+	Arguments:
+
+		_type (type): type to be ignored.
+
+	Returns:
+
+		Storable: storable instance that does not poke.
+
+	"""
+	return Storable(_type, handlers=StorableHandler(poke=fake_poke, peek=fail_peek))
 
 
 class _Class(object):
@@ -329,8 +499,7 @@ class _Class(object):
 	def instancemethod(self):
 		pass
 
-fake_handler = StorableHandler(poke=fake_poke, peek=fail_peek)
-function_storables = [ Storable(_type, handlers=fake_handler) for _type in frozenset(( \
+function_storables = [ not_storable(_type) for _type in frozenset(( \
 		type, \
 		type(len), \
 		type(lambda a: a), \

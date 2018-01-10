@@ -85,7 +85,7 @@ class StorableService(object):
 	def registerStorable(self, storable, replace=False, agnostic=False):
 		# check for compliance and fill in missing fields if possible
 		if not all([ isinstance(h.version, tuple) for h in storable.handlers ]):
-			raise TypeError('`Storable`''s version should be a tuple of numerical scalars')
+			raise TypeError("`Storable`'s version should be a tuple of numerical scalars")
 		if storable.storable_type is None:
 			module = storable.python_type.__module__
 			name = storable.python_type.__name__
@@ -103,9 +103,9 @@ class StorableService(object):
 		if self.hasStorableType(storable.storable_type):
 			existing = self.by_storable_type[storable.storable_type]
 			if storable.python_type is not existing.python_type:
-				raise TypeError('Storable type already exists')
+				raise TypeError('conflicting instances', storable.storable_type)
 		elif self.hasPythonType(storable.python_type):
-			raise TypeError('Native type already exists')
+			raise TypeError('conflicting instances', storable.python_type)
 		else:
 			existing = deepcopy(storable)
 			existing._handlers = []
@@ -131,9 +131,9 @@ class StorableService(object):
 			except KeyError:
 				return None
 		else:
-			if type(t) in self.by_python_type:
+			try:
 				return self.by_python_type[type(t)]
-			else:
+			except KeyError:
 				try:
 					return self.by_python_type[t.__class__]
 				except (AttributeError, KeyError):
