@@ -19,8 +19,16 @@ except NameError: # Py3
 	pass
 basetypes = (bool, int, float) + strtypes
 
-def isreference(a): # BUG!
-	return False#not isinstance(a, basetypes)
+def isreference(a):
+	check = ('__dict__', '__slots__')
+	for attr in check:
+		try:
+			getattr(a, attr)
+		except:
+			pass
+		else:
+			return True
+	return False
 
 
 class GenericStore(StoreBase):
@@ -36,27 +44,33 @@ class GenericStore(StoreBase):
 		return record
 
 	def formatRecordName(self, objname):
+		"""abstract method"""
 		raise NotImplementedError('abstract method')
 
 	def newContainer(self, objname, obj, container):
+		"""abstract method"""
 		raise NotImplementedError('abstract method')
 
 	def getRecord(self, objname, container):
+		"""abstract method"""
 		raise NotImplementedError('abstract method')
 
 	def getRecordAttr(self, attr, record):
+		"""abstract method"""
 		raise NotImplementedError('abstract method')
 
 	def setRecordAttr(self, attr, val, record):
+		"""abstract method"""
 		raise NotImplementedError('abstract method')
 
 	def isStorable(self, record):
 		return self.getRecordAttr('type', record) is not None
 
 	def isNativeType(self, obj):
-		return True
+		return True # per default, so that `tryPokeAny` is not called
 
 	def pokeNative(self, objname, obj, container):
+		"""abstract method"""
 		raise TypeError('record not supported')
 
 	def pokeStorable(self, storable, objname, obj, container, visited=None):
@@ -114,9 +128,11 @@ class GenericStore(StoreBase):
 				self.tryPokeAny(objname, obj, record, visited=visited)
 
 	def tryPokeAny(self, objname, obj, record, visited=None):
-		raise NotImplementedError
+		"""abstract method"""
+		raise NotImplementedError('abstract method')
 
 	def peekNative(self, record):
+		"""abstract method"""
 		raise TypeError('record not supported')
 
 	def peekStorable(self, storable, record):
@@ -383,27 +399,26 @@ def default_storable(python_type, exposes=None, version=None, storable_type=None
 
 		storable_type (str): universal string identifier for the type.
 
-		peek (callable): peek routine.
+		peek (callable): peeking routine.
 
 	Returns:
 
 		Storable: storable instance.
 
 	"""
-	_exposes = None
-	for extension in expose_extensions:
-		try:
-			_exposes = extension(python_type)
-		except (KeyboardInterrupt, SystemExit):
-			raise
-		except:
-			pass
-		else:
-			if _exposes:
-				exposes = _exposes
-				break
 	if not exposes:
-		raise AttributeError('`exposes` required for type: {!r}'.format(python_type))
+		for extension in expose_extensions:
+			try:
+				exposes = extension(python_type)
+			except (KeyboardInterrupt, SystemExit):
+				raise
+			except:
+				pass
+			else:
+				if exposes:
+					break
+		if not exposes:
+			raise AttributeError('`exposes` required for type: {!r}'.format(python_type))
 	return Storable(python_type, key=storable_type, \
 		handlers=StorableHandler(version=version, exposes=exposes, \
 		poke=poke(exposes), peek=peek(python_type, exposes)))

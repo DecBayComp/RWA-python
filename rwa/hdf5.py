@@ -154,6 +154,7 @@ def hdf5_storable(type_or_storable, *args, **kwargs):
 	hdf5_service.registerStorable(type_or_storable, *args, **kwargs)
 
 def hdf5_not_storable(_type, *args, **kwargs):
+	'''Tags a type as not serializable.'''
 	hdf5_service.registerStorable(not_storable(_type), *args, **kwargs)
 
 
@@ -161,6 +162,18 @@ hdf5_agnostic_modules = []
 
 
 class HDF5Store(GenericStore):
+	'''Store handler for hdf5 files.
+
+	Example::
+
+		hdf5 = HDF5Store(my_file, 'w')
+		hdf5.poke('my_object', any_object)
+		hdf5.close()
+
+		hdf5 = HDF5Store(my_file, 'r')
+		any_object = hdf5.peek('my_object')
+
+	'''
 	__slots__ = ('store',)
 
 	def __init__(self, resource, mode='auto', verbose=False):

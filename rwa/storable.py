@@ -8,7 +8,21 @@ class ConflictingVersionWarning(Warning):
 
 
 class StorableHandler(object):
-	'''Defines how to store an object of the class described by `Storable` `_parent`'''
+	'''Defines how to store an object of the class identified by `_parent`.
+
+	Attributes:
+
+		version (tuple): version number.
+
+		exposes (iterable): list of attributes to get/set.
+
+		peek (callable): read object from store.
+
+		poke (callable): write object in store.
+
+		_parent (Storable): storable instance this handler is associated to.
+
+	'''
 	__slots__ = ('version', 'exposes', 'poke', 'peek', '_parent')
 
 	@property
@@ -35,7 +49,17 @@ class StorableHandler(object):
 
 
 class Storable(object):
-	'''Describes a storable class'''
+	'''Describes a storable class.
+
+	Attributes:
+
+		python_type (type): type of the object to serialize.
+
+		storable_type (str): unique identification string.
+
+		_handlers (list): list of handlers.
+
+	'''
 	__slots__ = ('python_type', 'storable_type', '_handlers')
 
 	@property
@@ -76,6 +100,15 @@ class Storable(object):
 
 
 class StorableService(object):
+	'''Service for storable instances.
+
+	Attributes:
+
+		by_python_type (dict): dictionnary of storable instances with types as keys.
+
+		by_storable_type (dict): dictionnary of storable instances with identification strings as keys.
+
+	'''
 	__slots__ = ('by_python_type', 'by_storable_type') # what about native_type?
 
 	def __init__(self):
@@ -160,7 +193,14 @@ class StorableService(object):
 
 
 class StoreBase(StorableService):
-	'''Proxy class to `StorableService` that defines two abstract methods to be implemented for each concrete store'''
+	'''Proxy class to `StorableService` that defines two abstract methods to be implemented 
+	for each concrete store.
+
+	Attributes:
+
+		storables (StorableService): wrapped storable service.
+
+	'''
 	__slots__ = ('storables',)
 
 	def __init__(self, storables):
@@ -190,9 +230,35 @@ class StoreBase(StorableService):
 		self.storables.registerStorable(storable, **kwargs)
 
 	def peek(self, objname, container):
+		'''Reads from a container.
+
+		Arguments:
+
+			objname (str): object name.
+
+			container (any): address of the object in the store.
+
+		Returns:
+
+			any: deserialized object.
+
+		'''
 		raise NotImplementedError('abstract method')
 
 	def poke(self, objname, obj, container, visited=None):
+		'''Writes in a container.
+
+		Arguments:
+
+			objname (str): object name.
+
+			obj (any): object to serialize.
+
+			container (any): address of the object in the store.
+
+			visited (dict): already seriablized objects.
+
+		'''
 		raise NotImplementedError('abstract method')
 
 

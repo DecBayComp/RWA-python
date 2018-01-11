@@ -5,7 +5,7 @@ rwa package
 .. automodule:: rwa
     :members:
     :show-inheritance:
-..    :undoc-members:
+    :undoc-members:
 
 
 rwa.storable module
