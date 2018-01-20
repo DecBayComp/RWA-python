@@ -132,14 +132,15 @@ class StorableService(object):
 				storable.storable_type = 'Python.' + storable.storable_type
 		if not storable.handlers:
 			raise ValueError('missing handlers', storable.storable_type)
+		pokes = not all( h.poke is None for h in storable.handlers ) # not peek-only
 		# get the existing storable with its handlers or make a storable with a single handler..
 		if self.hasStorableType(storable.storable_type):
 			existing = self.by_storable_type[storable.storable_type]
 			if storable.python_type is not existing.python_type:
 				raise TypeError('conflicting instances', storable.storable_type)
-		elif self.hasPythonType(storable.python_type):
-			raise TypeError('conflicting instances', storable.python_type)
 		else:
+			if pokes and self.hasPythonType(storable.python_type):
+				raise TypeError('conflicting instances', storable.python_type)
 			existing = deepcopy(storable)
 			existing._handlers = []
 		# .. and add the other/new handlers
@@ -154,7 +155,8 @@ class StorableService(object):
 			else:
 				existing._handlers.append(h)
 		# place/replace the storable in the double dictionary
-		self.by_python_type[storable.python_type] = existing
+		if pokes:
+			self.by_python_type[storable.python_type] = existing
 		self.by_storable_type[storable.storable_type] = existing
 
 	def byPythonType(self, t):
