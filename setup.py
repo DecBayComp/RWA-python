@@ -7,7 +7,7 @@ from codecs import open
 import os.path
 
 # h5py mocked out in doc/conf.py
-install_requires = ['six', 'numpy', 'scipy', 'pandas', 'tables'] # , 'h5py'
+install_requires = ['six', 'numpy', 'scipy', 'pandas', 'tables', 'h5py']
 extras_require = {} 
 
 
@@ -22,7 +22,7 @@ except OSError:
 
 setup(
 	name = 'rwa-python',
-	version = '0.3',
+	version = '0.4',
 	description = 'HDF5-based serialization library for Python datatypes',
 	long_description = long_description,
 	url = 'https://github.com/DecBayComp/RWA-python',

@@ -26,6 +26,15 @@ rwa.generic module
     :show-inheritance:
 
 
+rwa.lazy module
+---------------
+
+.. automodule:: rwa.lazy
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 rwa.hdf5 module
 ---------------
 

@@ -2,11 +2,7 @@
 import six
 from .storable import *
 from collections import deque, OrderedDict
-from scipy.sparse import bsr_matrix, coo_matrix, csc_matrix, csr_matrix, \
-	dia_matrix, dok_matrix, lil_matrix
 import copy
-import numpy
-import pandas
 import warnings
 import traceback
 import importlib
@@ -33,6 +29,10 @@ def isreference(a):
 
 class GenericStore(StoreBase):
 	__slots__ = ('verbose',)
+
+	def __init__(self, storables, verbose=False):
+		StoreBase.__init__(self, storables)
+		self.verbose = verbose
 
 	def registerStorable(self, storable):
 		if not storable.handlers:
@@ -537,82 +537,100 @@ def peek_native(make):
 	return peek
 
 
-# numpy.dtype
-numpy_storables = [\
-	Storable(numpy.dtype, handlers=StorableHandler(poke=poke_native(lambda t: t.str), \
-		peek=peek_native(numpy.dtype)))]
+try:
+	import numpy
+except ImportError:
+	numpy_storables = []
+else:
+	# numpy.dtype
+	numpy_storables = [\
+		Storable(numpy.dtype, handlers=StorableHandler(poke=poke_native(lambda t: t.str), \
+			peek=peek_native(numpy.dtype)))]
 
 
 def handler(init, exposes):
 	return StorableHandler(poke=poke(exposes), peek=peek(init, exposes))
 
-# scipy.sparse storable instances
-bsr_exposes = ['shape', 'data', 'indices', 'indptr']
-def mk_bsr(shape, data, indices, indptr):
-	return bsr_matrix((data, indices, indptr), shape=shape)
-bsr_handler = handler(mk_bsr, bsr_exposes)
 
-coo_exposes = ['shape', 'data', 'row', 'col']
-def mk_coo(shape, data, row, col):
-	return bsr_matrix((data, (row, col)), shape=shape)
-coo_handler = handler(mk_coo, coo_exposes)
+try:
+	from scipy.sparse import bsr_matrix, coo_matrix, csc_matrix, csr_matrix, \
+		dia_matrix, dok_matrix, lil_matrix
+except ImportError:
+	sparse_storables = []
+else:
+	# scipy.sparse storable instances
+	bsr_exposes = ['shape', 'data', 'indices', 'indptr']
+	def mk_bsr(shape, data, indices, indptr):
+		return bsr_matrix((data, indices, indptr), shape=shape)
+	bsr_handler = handler(mk_bsr, bsr_exposes)
 
-csc_exposes = ['shape', 'data', 'indices', 'indptr']
-def mk_csc(shape, data, indices, indptr):
-	return csc_matrix((data, indices, indptr), shape=shape)
-csc_handler = handler(mk_csc, csc_exposes)
+	coo_exposes = ['shape', 'data', 'row', 'col']
+	def mk_coo(shape, data, row, col):
+		return bsr_matrix((data, (row, col)), shape=shape)
+	coo_handler = handler(mk_coo, coo_exposes)
 
-csr_exposes = ['shape', 'data', 'indices', 'indptr']
-def mk_csr(shape, data, indices, indptr):
-	return csr_matrix((data, indices, indptr), shape=shape)
-csr_handler = handler(mk_csr, csr_exposes)
+	csc_exposes = ['shape', 'data', 'indices', 'indptr']
+	def mk_csc(shape, data, indices, indptr):
+		return csc_matrix((data, indices, indptr), shape=shape)
+	csc_handler = handler(mk_csc, csc_exposes)
 
-dia_exposes = ['shape', 'data', 'offsets']
-def mk_dia(shape, data, offsets):
-	return dia_matrix((data, offsets), shape=shape)
-dia_handler = handler(mk_dia, dia_exposes)
+	csr_exposes = ['shape', 'data', 'indices', 'indptr']
+	def mk_csr(shape, data, indices, indptr):
+		return csr_matrix((data, indices, indptr), shape=shape)
+	csr_handler = handler(mk_csr, csr_exposes)
 
-# previously
-def dok_recommend(*vargs):
-	raise TypeErrorWithAlternative('dok_matrix', 'coo_matrix')
-dok_handler = StorableHandler(poke=dok_recommend, peek=dok_recommend)
-# now
-def dok_poke(service, matname, mat, container, visited=None):
-	coo_handler.poke(service, matname, mat.tocoo(), container, visited=visited)
-def dok_peek(service, container):
-	return coo_handler.peek(service, container).todok()
-dok_handler = StorableHandler(poke=dok_poke, peek=dok_peek)
+	dia_exposes = ['shape', 'data', 'offsets']
+	def mk_dia(shape, data, offsets):
+		return dia_matrix((data, offsets), shape=shape)
+	dia_handler = handler(mk_dia, dia_exposes)
 
-# previously
-def lil_recommend(*vargs):
-	raise TypeErrorWithAlternative('lil_matrix', ('csr_matrix', 'csc_matrix'))
-lil_handler = StorableHandler(poke=lil_recommend, peek=lil_recommend)
-# now
-def lil_poke(service, matname, mat, container, visited=None):
-	csr_handler.poke(service, matname, mat.tocsr(), container, visited=visited)
-def lil_peek(service, container):
-	return csr_handler.peek(service, container).tolil()
-lil_handler = StorableHandler(poke=lil_poke, peek=lil_peek)
+	# previously
+	def dok_recommend(*vargs):
+		raise TypeErrorWithAlternative('dok_matrix', 'coo_matrix')
+	dok_handler = StorableHandler(poke=dok_recommend, peek=dok_recommend)
+	# now
+	def dok_poke(service, matname, mat, container, visited=None):
+		coo_handler.poke(service, matname, mat.tocoo(), container, visited=visited)
+	def dok_peek(service, container):
+		return coo_handler.peek(service, container).todok()
+	dok_handler = StorableHandler(poke=dok_poke, peek=dok_peek)
 
-
-sparse_storables = [Storable(bsr_matrix, handlers=bsr_handler), \
-	Storable(coo_matrix, handlers=coo_handler), \
-	Storable(csc_matrix, handlers=csc_handler), \
-	Storable(csr_matrix, handlers=csr_handler), \
-	Storable(dia_matrix, handlers=dia_handler), \
-	Storable(dok_matrix, handlers=dok_handler), \
-	Storable(lil_matrix, handlers=lil_handler)]
+	# previously
+	def lil_recommend(*vargs):
+		raise TypeErrorWithAlternative('lil_matrix', ('csr_matrix', 'csc_matrix'))
+	lil_handler = StorableHandler(poke=lil_recommend, peek=lil_recommend)
+	# now
+	def lil_poke(service, matname, mat, container, visited=None):
+		csr_handler.poke(service, matname, mat.tocsr(), container, visited=visited)
+	def lil_peek(service, container):
+		return csr_handler.peek(service, container).tolil()
+	lil_handler = StorableHandler(poke=lil_poke, peek=lil_peek)
 
 
-def poke_index(service, name, obj, container, visited=None):
-	poke_seq(service, name, obj.tolist(), container, visited=visited)
-def peek_index(service, container):
-	return pandas.Index(peek_list(service, container))
+	sparse_storables = [Storable(bsr_matrix, handlers=bsr_handler), \
+		Storable(coo_matrix, handlers=coo_handler), \
+		Storable(csc_matrix, handlers=csc_handler), \
+		Storable(csr_matrix, handlers=csr_handler), \
+		Storable(dia_matrix, handlers=dia_handler), \
+		Storable(dok_matrix, handlers=dok_handler), \
+		Storable(lil_matrix, handlers=lil_handler)]
 
-# as such in Python3; force it in Python2 to be the same
-pandas_storables = [Storable(pandas.Index, \
-	key='Python.pandas.core.index.Index', \
-	handlers=StorableHandler(poke=poke_index, peek=peek_index))]
+
+try:
+	import pandas
+except ImportError:
+	pandas_storables = []
+else:
+	def poke_index(service, name, obj, container, visited=None):
+		poke_seq(service, name, obj.tolist(), container, visited=visited)
+	def peek_index(service, container):
+		return pandas.Index(peek_list(service, container))
+
+	# as such in Python3; force it in Python2 to be the same
+	pandas_storables = [Storable(pandas.Index, \
+		key='Python.pandas.core.index.Index', \
+		handlers=StorableHandler(poke=poke_index, peek=peek_index))]
+
 
 
 def namedtuple_storable(namedtuple, *args, **kwargs):

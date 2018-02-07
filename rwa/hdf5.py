@@ -3,18 +3,13 @@ import os
 import six
 
 import h5py
-try:
-	import tables
-except ImportError as e:
-	import warnings
-	warnings.warn(e.msg, ImportWarning)
-from pandas import read_hdf, Series, DataFrame, Panel, SparseSeries
 
 from numpy import string_, ndarray#, MaskedArray
 import tempfile
 import itertools
 from .storable import *
 from .generic import *
+from .lazy import FileStore
 
 
 # to_string variants
@@ -87,39 +82,50 @@ def _debug(f):
 				print(' - {}=({})'.format(a, e.args[0]))
 	f.visititems(printname)
 
-def copy_hdf(from_table, to_table, name):
-	from_table.copy(from_table, to_table, name=name)
-
-def peek_Pandas(service, from_table):
-	fd, tmpfilename = tempfile.mkstemp()
-	os.close(fd)
+try:
+	from pandas import read_hdf, Series, DataFrame, Panel, SparseSeries
+except ImportError:
+	pass
+else:
 	try:
-		to_table = h5py.File(tmpfilename, 'w')
-		try:
-			copy_hdf(from_table['root'], to_table, 'root')
-		finally:
-			to_table.close()
-		table = read_hdf(tmpfilename, 'root')
-	finally:
-		os.unlink(tmpfilename)
-	return table
-
-def poke_Pandas(service, objname, obj, to_table, visited=None):
-	fd, tmpfilename = tempfile.mkstemp()
-	os.close(fd)
-	try:
-		obj.to_hdf(tmpfilename, 'root')
-		from_table = h5py.File(tmpfilename, 'r', libver='latest')
-		try:
-			copy_hdf(from_table, to_table, objname)
-		finally:
-			from_table.close()
+		import tables
 	except ImportError as e:
 		import warnings
 		warnings.warn(e.msg, ImportWarning)
-	finally:
-		os.unlink(tmpfilename)
+
+	def copy_hdf(from_table, to_table, name):
+		from_table.copy(from_table, to_table, name=name)
+
+	def peek_Pandas(service, from_table):
+		fd, tmpfilename = tempfile.mkstemp()
+		os.close(fd)
+		try:
+			to_table = h5py.File(tmpfilename, 'w')
+			try:
+				copy_hdf(from_table['root'], to_table, 'root')
+			finally:
+				to_table.close()
+			table = read_hdf(tmpfilename, 'root')
+		finally:
+			os.unlink(tmpfilename)
+		return table
+
+	def poke_Pandas(service, objname, obj, to_table, visited=None):
+		fd, tmpfilename = tempfile.mkstemp()
+		os.close(fd)
+		try:
+			obj.to_hdf(tmpfilename, 'root')
+			from_table = h5py.File(tmpfilename, 'r', libver='latest')
+			try:
+				copy_hdf(from_table, to_table, objname)
+			finally:
+				from_table.close()
+		finally:
+			os.unlink(tmpfilename)
 	#_debug(to_table.file)
+	pandas_storables += [Storable(Series, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas)), \
+		Storable(DataFrame, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas)), \
+		Storable(Panel, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas))]
 
 
 string_storables = [\
@@ -128,9 +134,6 @@ string_storables = [\
 	Storable(six.text_type, key='Python.unicode', \
 		handlers=StorableHandler(poke=string_poke, peek=text_peek))]
 numpy_storables += [Storable(ndarray, handlers=StorableHandler(poke=native_poke, peek=native_peek))]
-pandas_storables += [Storable(Series, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas)), \
-	Storable(DataFrame, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas)), \
-	Storable(Panel, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas))]
 
 hdf5_storables = itertools.chain(\
 	function_storables, \
@@ -161,7 +164,8 @@ def hdf5_not_storable(_type, *args, **kwargs):
 hdf5_agnostic_modules = []
 
 
-class HDF5Store(GenericStore):
+
+class HDF5Store(FileStore):
 	'''Store handler for hdf5 files.
 
 	Example::
@@ -174,24 +178,34 @@ class HDF5Store(GenericStore):
 		any_object = hdf5.peek('my_object')
 
 	'''
-	__slots__ = ('store',)
+	__slots__ = ()
 
-	def __init__(self, resource, mode='auto', verbose=False):
-		GenericStore.__init__(self, hdf5_service)
-		self.verbose = verbose
+	def __init__(self, resource, mode='auto', verbose=False, **kwargs):
+		FileStore.__init__(self, hdf5_service, resource, mode=mode, verbose=verbose, **kwargs)
+		self.lazy = False # for backward compatibility
+
+	def writes(self, mode):
+		return mode in ('w', 'auto')
+
+	def __open__(self, resource, mode='auto'):
 		if isinstance(resource, h5py.File): # either h5py.File or tables.File
-			self.store = resource
+			return resource
 		else:
 			if mode is 'auto':
 				if os.path.isfile(resource):
-					self.store = h5py.File(resource, 'r', libver='latest')
+					return h5py.File(resource, 'r', libver='latest')
 				else:
-					self.store = h5py.File(resource, 'w', libver='latest')
-			else:	self.store = h5py.File(resource, mode)
+					return h5py.File(resource, 'w', libver='latest')
+			else:	return h5py.File(resource, mode)
 
-	def close(self):
-		if self.store is not None:
-			self.store.close()
+	# backward compatibility property
+	@property
+	def store(self):
+		return self.handle
+
+	@store.setter
+	def store(self, store):
+		self.handle = store
 
 	#def strRecord(self, record, container):
 	#	return to_str(record)
@@ -227,7 +241,7 @@ class HDF5Store(GenericStore):
 	def poke(self, objname, obj, container=None, visited=None):
 		if container is None:
 			container = self.store
-		GenericStore.poke(self, objname, obj, container, visited=visited)
+		FileStore.poke(self, objname, obj, container, visited=visited)
 
 	def pokeNative(self, objname, obj, container):
 		if obj is not None:
@@ -245,7 +259,7 @@ class HDF5Store(GenericStore):
 	def peek(self, objname, record=None):
 		if record is None:
 			record = self.store
-		return GenericStore.peek(self, objname, record)
+		return FileStore.peek(self, objname, record)
 
 	def peekNative(self, record):
 		try:
@@ -282,4 +296,10 @@ class HDF5Store(GenericStore):
 				path = submodule
 			modules.append(path)
 		return any([ m in hdf5_agnostic_modules for m in modules ])
+
+	def container(self, name):
+		return self.store[name]
+
+	def locator(self, record):
+		return record.name
 
