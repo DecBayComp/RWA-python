@@ -1,21 +1,35 @@
 
 from .generic import GenericStore
-from threading import Lock
+import rwa.generic as generic
+from threading import RLock
 import os
 import shutil
 
 
 class LazyStore(GenericStore):
 
-	__slots__ = ('handle', 'lazy', '_lock', 'open_args', 'open_kwargs')
+	__slots__ = ('handle', '_lazy', '_default_lazy', '_lock', 'open_args', 'open_kwargs')
 
 	def __init__(self, storables, verbose=False, **kwargs):
 		GenericStore.__init__(self, storables, verbose)
 		self.handle = None
-		self.lazy = True
-		self._lock = Lock()
+		self._default_lazy = self._lazy = LazyPeek
+		self._lock = RLock()
 		self.open_args = ()
 		self.open_kwargs = kwargs
+
+	@property
+	def lazy(self):
+		return self._lazy is not None
+
+	@lazy.setter
+	def lazy(self, lazy):
+		if _issubclass(lazy, LazyPeek):
+			self._lazy = lazy
+		elif lazy:
+			self._lazy = self._default_lazy
+		else:
+			self._lazy = None
 
 	def open(self):
 		if self.handle is None:
@@ -39,19 +53,19 @@ class LazyStore(GenericStore):
 			return GenericStore.peek(self, objname, container)
 		else:
 			try:
-				past_value, self.lazy = self.lazy, lazy
+				past_value, self.lazy = self._lazy, lazy
 				return GenericStore.peek(self, objname, container)
 			finally:
-				self.lazy = past_value
+				self._lazy = past_value
 
 	def peekStorable(self, storable, record):
 		if self.lazy:
-			return LazyPeek(self, storable, record)
+			return self._lazy(self, storable, record)
 		else:
 			return GenericStore.peekStorable(self, storable, record)
 
 	def poke(self, objname, obj, record, visited=None):
-		GenericStore.poke(self, objname, lazyvalue(obj), record, visited)
+		GenericStore.poke(self, objname, lazyvalue(obj, deep=True), record, visited)
 
 	def locator(self, record):
 		return record
@@ -71,25 +85,31 @@ class LazyStore(GenericStore):
 
 
 class LazyPeek(object):
-	__slots__ = ('storable', 'store', 'locator')
+	__slots__ = ('storable', 'store', 'locator', '_value', '_deep')
 
 	def __init__(self, store, storable, container):
 		self.storable = storable
 		self.store = store
 		self.locator = store.locator(container)
+		self._value = self._deep = None
 
 	def peek(self, deep=False, block=True):
-		if not self.store.lock(block):
-			return
-		try:
-			previous, self.store.lazy = self.store.lazy, not deep
+		if self._value is None or (deep and not self._deep):
+			if not self.store.lock(block):
+				return
 			try:
-				return GenericStore.peekStorable(self.store, self.storable,
-					self.store.container(self.locator))
+				previous, self.store.lazy = self.store.lazy, not deep
+				try:
+					self._value = GenericStore.peekStorable(
+						self.store, 
+						self.storable,
+						self.store.container(self.locator))
+					self._deep = deep
+				finally:
+					self.store.lazy = previous
 			finally:
-				self.store.lazy = previous
-		finally:
-			self.store.release()
+				self.store.release()
+		return self._value
 
 	def deep(self):
 		return self.peek(True)
@@ -97,13 +117,69 @@ class LazyPeek(object):
 	def shallow(self):
 		return self.peek()
 
-	#@property
-	#def value(self):
-	#	return self.deep()
+	@property
+	def value(self):
+		return self.shallow()
 
 	@property
 	def type(self):
 		return self.storable.python_type
+
+	def permissive(self, true=True):
+		if true:
+			new = PermissivePeek(self.store, self.storable, self.container)
+			new._value, new._deep = self._value, self._deep
+			return new
+		else:
+			return self
+
+
+class PermissivePeek(LazyPeek):
+
+	def permissive(self, true=True):
+		if true:
+			return self
+		else:
+			new = LazyPeek(self.store, self.storable, self.container)
+			new._value, new._deep = self._value, self._deep
+			return new
+
+	@property
+	def value(self):
+		return self.deep()
+
+	def __getattr__(self, name):
+		return getattr(self.value, name)
+
+	def __nonzero__(self):
+		return self.value.__nonzero__()
+
+	def __len__(self):
+		return self.value.__len__()
+
+	def __getitem__(self, key):
+		return self.value.__getitem__(key)
+
+	def __missing__(self, key):
+		return self.value.__missing__(key)
+
+	def __iter__(self):
+		return self.value.__iter__()
+
+	def __reversed__(self):
+		return self.value.__reversed__()
+
+	def __contains__(self, item):
+		return self.value.__contains__(item)
+
+	def __getslice__(self, i, j):
+		return self.value.__getslice__(i, j)
+
+	def __enter__(self):
+		return self.value.__enter__()
+
+	def __exit__(self, exc_type, exc_value, traceback):
+		self.value.__exit__(exc_type, exc_value, traceback)
 
 
 def islazy(_object):
@@ -141,6 +217,8 @@ class FileStore(LazyStore):
 				import tempfile
 				f, temporary = tempfile.mkstemp()
 				os.close(f)
+			if self.verbose:
+				print('flushing into temporary file: {}'.format(temporary))
 			self.temporary = temporary
 			self.open_args = (temporary, )
 		else:
@@ -155,4 +233,70 @@ class FileStore(LazyStore):
 		if self.temporary:
 			shutil.move(self.temporary, self.resource)
 			self.temporary = None
+
+	def __del__(self):
+		# if the caller forgot to call `close` (e.g. on hitting an unexpected error)
+		if self.temporary:
+			try:
+				os.unlink(self.temporary)
+			except (KeyboardInterrupt, SystemExit):
+				raise
+			except:
+				pass
+
+
+def _issubclass(a, b):
+	try:
+		return issubclass(a, b)
+	except TypeError:
+		return False
+
+
+# overwrites
+def peek_assoc(s, c):
+	# fully peeks the first elements
+	items = [ lazyvalue(a) for a in generic.peek_assoc(s, c) ]
+	return [ (lazyvalue(a, deep=True), b) for a, b in items ]
+
+import collections
+_overwrites = {
+	list:	generic.assoc_to_list,
+	tuple:	list,
+	set:	list,
+	frozenset:	list,
+	dict:	None,
+	collections.deque:	list,
+	collections.OrderedDict:	None,
+	}
+
+def _wrap(f):
+	return lambda s, c: f(peek_assoc(s, c))
+
+def _peek(_type):
+	strategy = _overwrites[_type]
+	if strategy is None:
+		return _type
+	elif isinstance(strategy, type):
+		f = _peek(strategy)
+		return lambda a: _type(f(a))
+	elif callable(strategy):
+		return strategy
+	else:
+		raise ValueError
+
+# update `seq_storables`
+for _storable in generic.seq_storables:
+	if _storable.handlers[1:]:
+		import warnings
+		warnings.warn('multiple handlers for storable: {}'.format(_storable.python_type),
+			DeprecationWarning) # raw.lazy may be outdated
+		continue
+	try:
+		_new_peek = _wrap(_peek(_storable.python_type))
+	except KeyError:
+		import warnings
+		warnings.warn('unsupported sequence storable: {}'.format(_storable.python_type),
+			DeprecationWarning) # raw.lazy may be outdated
+		continue
+	_storable.handlers[0].peek = _new_peek
 

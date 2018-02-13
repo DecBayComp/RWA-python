@@ -458,13 +458,13 @@ def peek_frozenset(s, c):
 	return frozenset(peek_list(s, c))
 def peek_dict(s, c):
 	items = peek_assoc(s, c)
-	if items:
-		if not all([ len(i) == 2 for i in items ]):
-			print(items)
-			raise ValueError('missing keys')
-		if len(set(k for k,_ in items)) < len(items):
-			print(items)
-			raise ValueError('duplicate keys')
+	#if items:
+	#	if not all([ len(i) == 2 for i in items ]):
+	#		print(items)
+	#		raise ValueError('missing keys')
+	#	if len(set(k for k,_ in items)) < len(items):
+	#		print(items)
+	#		raise ValueError('duplicate keys')
 	return dict(items)
 def peek_deque(s, c):
 	return deque(peek_list(s, c))
