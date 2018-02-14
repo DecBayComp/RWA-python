@@ -268,6 +268,12 @@ _overwrites = {
 	collections.deque:	list,
 	collections.OrderedDict:	None,
 	}
+try:
+	import pandas
+except ImportError:
+	pass
+else:
+	_overwrites[pandas.Index] = list
 
 def _wrap(f):
 	return lambda s, c: f(peek_assoc(s, c))

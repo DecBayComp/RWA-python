@@ -6,8 +6,8 @@ from setuptools import setup
 from codecs import open
 import os.path
 
-# h5py mocked out in doc/conf.py
-install_requires = ['six', 'numpy', 'scipy', 'pandas', 'tables', 'h5py']
+# all requirements moved to requirements.txt
+install_requires = []
 extras_require = {} 
 
 
