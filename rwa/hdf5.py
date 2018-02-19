@@ -10,6 +10,7 @@ import itertools
 from .storable import *
 from .generic import *
 from .lazy import FileStore
+from .sequence import *
 
 
 # to_string variants
@@ -135,10 +136,55 @@ string_storables = [\
 		handlers=StorableHandler(poke=string_poke, peek=text_peek))]
 numpy_storables += [Storable(ndarray, handlers=StorableHandler(poke=native_poke, peek=native_peek))]
 
+class SequenceV2(SequenceHandling):
+	def suitable_record_name(self, name):
+		return isinstance(name, generic.strtypes + (int, ))
+	def to_record_name(self, name):
+		if isinstance(name, int):
+			name = str(name)
+		return name
+	def from_record_name(self, name, typestr=None):
+		if 'int' in typestr.lower():
+			name = int(name)
+		return name
+	def iter_records(self, store, container):
+		return container.keys()
+	def suitable_array_element(self, elem):
+		return True # let's delegate to `poke_array`
+	def poke_array(self, store, name, elemtype, elements, container, visited):
+		if elemtype in strtypes:
+			string_poke(store, name, elements, container, visited=visited)
+		else:
+			native_poke(store, name, elements, container, visited=visited)
+		return store.getRecord(name, container)
+	def peek_array(self, store, elemtype, container):
+		if elemtype is six.text_type:
+			return text_peek(store, container)
+		elif elemtype is six.binary_type:
+			return binary_peek(store, container)
+		else:
+			return native_peek(store, container)
+
+import copy
+_seq_handlers_v2 = SequenceV2().base_handlers()
+seq_storables_v2 = []
+for _type, _handler in _seq_handlers_v2.items():
+	for _storable in seq_storables:
+		if _storable.python_type is _type:
+			break
+	if _storable.python_type is _type:
+		_storable = copy.deepcopy(_storable)
+		_handler.version = (2,)
+		_storable.handlers.append(_handler)
+	else:
+		_storable = Storable(_type, handlers=_handler)
+	seq_storables_v2.append(_storable)
+
+
 hdf5_storables = itertools.chain(\
-	function_storables, \
+	with_type_support(function_storables), \
 	string_storables, \
-	seq_storables, \
+	seq_storables_v2, \
 	numpy_storables, \
 	sparse_storables, \
 	pandas_storables)
@@ -211,13 +257,7 @@ class HDF5Store(FileStore):
 	#	return to_str(record)
 
 	def formatRecordName(self, objname):
-		if isinstance(objname, six.text_type):
-			objname = six.b(objname)
-		slash = six.b('/')
-		if slash in objname:
-			warn(objname, WrongRecordNameWarning)
-			objname = objname.translate(None, slash)
-		return objname
+		return six.b(objname) if isinstance(objname, six.text_type) else objname
 
 	def newContainer(self, objname, obj, container):
 		group = container.create_group(objname)

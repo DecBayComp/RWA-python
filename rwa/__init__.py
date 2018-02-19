@@ -2,6 +2,7 @@
 from . import storable
 from . import generic
 from . import lazy
+from . import sequence
 from .storable import Storable, StorableHandler
 from .generic import default_storable, namedtuple_storable, not_storable
 from .lazy import islazy, lazytype, lazyvalue

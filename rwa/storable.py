@@ -86,10 +86,20 @@ class Storable(object):
 		return version in [ h.version for h in self.handlers ]
 		
 	def asVersion(self, version=None):
-		return self.handlers[0] # not implemented yet!!!
-		#if version:
-		#	raise NotImplementedError
-		#else:
+		handler = None
+		if version is None:
+			for h in self.handlers:
+				if handler is None or handler.version < h.version:
+					handler = h
+		else:
+			version = to_version(version)
+			for h in self.handlers:
+				if h.version == version:
+					handler = h
+					break
+			if handler is None:
+				raise KeyError('no such version number: {}'.format(version))
+		return handler
 
 	def poke(self, *vargs, **kwargs):
 		self.asVersion(kwargs.pop('version', None)).poke(*vargs, **kwargs)
@@ -97,6 +107,19 @@ class Storable(object):
 	def peek(self, *vargs, **kwargs):
 		return self.asVersion(kwargs.pop('version', None)).peek(*vargs, **kwargs)
 
+
+def format_type(python_type, agnostic=False):
+	module = python_type.__module__
+	name = python_type.__name__
+	if module in ['__builtin__', 'builtins']:
+		storable_type = name
+	elif module.endswith(name):
+		storable_type = module
+	else:
+		storable_type = module + '.' + name
+	if not agnostic:
+		storable_type = 'Python.' + storable_type
+	return storable_type
 
 
 class StorableService(object):
@@ -120,16 +143,7 @@ class StorableService(object):
 		if not all([ isinstance(h.version, tuple) for h in storable.handlers ]):
 			raise TypeError("`Storable`'s version should be a tuple of numerical scalars")
 		if storable.storable_type is None:
-			module = storable.python_type.__module__
-			name = storable.python_type.__name__
-			if module in ['__builtin__', 'builtins']:
-				storable.storable_type = name
-			elif module.endswith(name):
-				storable.storable_type = module
-			else:
-				storable.storable_type = module + '.' + name
-			if not agnostic:
-				storable.storable_type = 'Python.' + storable.storable_type
+			storable.storable_type = format_type(storable.python_type, agnostic)
 		if not storable.handlers:
 			raise ValueError('missing handlers', storable.storable_type)
 		pokes = not all( h.poke is None for h in storable.handlers ) # not peek-only
@@ -166,6 +180,7 @@ class StorableService(object):
 			except KeyError:
 				return None
 		else:
+			raise TypeError
 			try:
 				return self.by_python_type[type(t)]
 			except KeyError:
@@ -266,7 +281,14 @@ class StoreBase(StorableService):
 
 
 def to_version(v):
-	return tuple([ int(i) for i in v.split('.') ])
+	if isinstance(v, tuple):
+		return v
+	elif isinstance(v, list):
+		return tuple(v)
+	elif isinstance(v, int):
+		return (v, )
+	else:
+		return tuple([ int(i) for i in v.split('.') ])
 
 def from_version(v):
 	s = '{:d}'

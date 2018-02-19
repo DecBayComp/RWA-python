@@ -27,6 +27,21 @@ def isreference(a):
 	return False
 
 
+def lookup_type(storable_type):
+	if storable_type.startswith('Python'):
+		_, module_name = storable_type.split('.', 1)
+	else:
+		module_name = storable_type
+	type_name, module_name = \
+		[ _name[::-1] for _name in module_name[::-1].split('.', 1) ]
+	try:
+		module = importlib.import_module(module_name)
+		python_type = getattr(module, type_name)
+	except (ImportError, AttributeError):
+		python_type = None
+	return python_type
+
+
 class GenericStore(StoreBase):
 	__slots__ = ('verbose',)
 
@@ -78,15 +93,16 @@ class GenericStore(StoreBase):
 		storable.poke(self, objname, obj, container, visited=visited)
 		try:
 			record = self.getRecord(objname, container)
-			self.setRecordAttr('type', storable.storable_type, record)
-			if storable.version is not None:
-				self.setRecordAttr('version', from_version(storable.version), record)
 		except KeyError:
 			# fake storable; silently skip
 			if self.verbose:
 				print("skipping `{}` (type: {})".format(objname, storable.storable_type))
 				if 1 < self.verbose:
 					print(traceback.format_exc())
+		else:
+			self.setRecordAttr('type', storable.storable_type, record)
+			if storable.version is not None:
+				self.setRecordAttr('version', from_version(storable.version), record)
 
 	def pokeVisited(self, objname, obj, record, existing, visited=None):
 		if self.hasPythonType(obj):
@@ -115,9 +131,13 @@ class GenericStore(StoreBase):
 					typetype, type(obj).__name__))
 			objname = self.formatRecordName(objname)
 			if isreference(obj):
-				if id(obj) in visited:
-					return self.pokeVisited(objname, obj, record, \
-						visited[id(obj)], visited=visited)
+				try:
+					previous = visited[id(obj)]
+				except KeyError:
+					pass
+				else:
+					return self.pokeVisited(objname, obj, record, previous, \
+						visited=visited)
 				visited[id(obj)] = (record, objname)
 			if self.hasPythonType(obj):
 				storable = self.byPythonType(type(obj)).asVersion()
@@ -155,14 +175,7 @@ class GenericStore(StoreBase):
 
 	def defaultStorable(self, python_type=None, storable_type=None, version=None, **kwargs):
 		if python_type is None:
-			if storable_type.startswith('Python'):
-				_, module_name = storable_type.split('.', 1)
-			else:
-				module_name = storable_type
-			type_name, module_name = \
-				[ _name[::-1] for _name in module_name[::-1].split('.', 1) ]
-			module = importlib.import_module(module_name)
-			python_type = getattr(module, type_name)
+			python_type = lookup_type(storable_type)
 		if self.verbose:
 			print('generating storable instance for type: {}'.format(python_type))
 		self.storables.registerStorable(default_storable(python_type, \
@@ -535,6 +548,23 @@ def peek_native(make):
 	def peek(service, container):
 		return make(service.peekNative(container))
 	return peek
+
+
+type_storable = Storable(type, handlers=StorableHandler(
+			peek=peek_native(lookup_type),
+			poke=poke_native(format_type)))
+
+def with_type_support(storables):
+	_storables = []
+	inserted = False
+	for _storable in storables:
+		if _storable.python_type is type:
+			_storable = type_storable
+			inserted = True
+		_storables.append(_storable)
+	if not inserted:
+		_storables.append(type_storable)
+	return _storables
 
 
 try:
