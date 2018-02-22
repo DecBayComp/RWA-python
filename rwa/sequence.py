@@ -116,7 +116,8 @@ class SequenceHandling(object):
 
 	def peek_homogeneous_list(self, store, container):
 		elemtype = store.getRecordAttr('element type', container)
-		return list(self.peek_array(store, elemtype, container))
+		elems = self.peek_array(store, elemtype, container)
+		return list(elems)
 
 	def peek_heterogeneous_list(self, store, container):
 		_list = []

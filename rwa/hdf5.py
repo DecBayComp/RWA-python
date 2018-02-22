@@ -152,17 +152,14 @@ class SequenceV2(SequenceHandling):
 	def suitable_array_element(self, elem):
 		return True # let's delegate to `poke_array`
 	def poke_array(self, store, name, elemtype, elements, container, visited):
-		if elemtype in strtypes:
-			string_poke(store, name, elements, container, visited=visited)
-		else:
-			native_poke(store, name, elements, container, visited=visited)
+		native_poke(store, name, elements, container, visited=visited)
 		return store.getRecord(name, container)
 	def peek_array(self, store, elemtype, container):
-		if elemtype is six.text_type:
-			return text_peek(store, container)
-		elif elemtype is six.binary_type:
-			return binary_peek(store, container)
-		else:
+		#if elemtype is six.text_type:
+		#	return text_peek(store, container)
+		#elif elemtype is six.binary_type:
+		#	return binary_peek(store, container)
+		#else:
 			return native_peek(store, container)
 
 import copy
@@ -236,13 +233,19 @@ class HDF5Store(FileStore):
 	def __open__(self, resource, mode='auto'):
 		if isinstance(resource, h5py.File): # either h5py.File or tables.File
 			return resource
-		else:
-			if mode is 'auto':
-				if os.path.isfile(resource):
-					return h5py.File(resource, 'r', libver='latest')
-				else:
-					return h5py.File(resource, 'w', libver='latest')
-			else:	return h5py.File(resource, mode)
+		if mode is 'auto':
+			if os.path.isfile(resource):
+				return h5py.File(resource, 'r', libver='latest')
+			else:
+				return h5py.File(resource, 'w', libver='latest')
+		try:
+			return h5py.File(resource, mode)
+		except IOError as e:
+			if e.args[0] == 'Unable to open file (File signature not found)':
+				try:
+					raise FileNotFoundError(resource)
+				except NameError:
+					raise OSError('file not found: {}'.format(resource))
 
 	# backward compatibility property
 	@property

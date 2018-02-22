@@ -31,9 +31,12 @@ With Python3, **RWA-python** serialization is fully automatic.
 The library generates serialization schemes for most custom types.
 When deserializing objects, it also looks for and loads the modules where the corresponding types are defined.
 
-With Python2, the library requires explicit definitions if many cases.
-Current recommendations include using new style classes (deriving new classes from `object`) 
-and defining the `__slots__` class variable.
+If **RWA-python** complains about a type that cannot be serialized, a partial fix consists of ignoring this datatype::
+
+	hdf5_not_storable(type(unserializable_object))
+
+
+With Python2, the library requires explicit definitions in most cases.
 
 
 Installation
