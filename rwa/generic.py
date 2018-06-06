@@ -8,11 +8,11 @@ import traceback
 import importlib
 
 
-strtypes = (str, bytes)
+strtypes = str
 try: # Py2
-        strtypes = strtypes + (unicode,)
+        strtypes = (strtypes, unicode)
 except NameError: # Py3
-        pass
+        strtypes = (strtypes, bytes)
 basetypes = (bool, int, float) + strtypes
 
 def isreference(a):

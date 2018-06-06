@@ -40,10 +40,10 @@ class SequenceHandling(object):
                 if not _list:
                         return self.new_container(store, name, _list, container)
                 # check homogeneity
-                _any = _list[0]
+                _any = next(iter(_list)) # `set` does not support indexing
                 if self.suitable_array_element(_any):
                         _type = type(_any)
-                        homogeneous = all(isinstance(x, _type) for x in _list) # _list[1:] does not work with `deque`
+                        homogeneous = all(type(x) is _type for x in _list) # _list[1:] does not work with `deque`
                 else:
                         homogeneous = False
                 if homogeneous:
@@ -73,13 +73,12 @@ class SequenceHandling(object):
                                         #               container)
                                         store.poke(arg, val, record, visited=visited)
                 return poke
-        
+
         def poke_homogeneous_list(self, store, name, _type, _list, container, visited):
-                record = self.poke_array(store, name, _type, _list, container, visited)
+                record = self.poke_array(store, name, _type, list(_list), container, visited)
                 if record is not None:
                         store.setRecordAttr('element type', format_type(_type), record)
                 return record
-                
 
         def poke_heterogeneous_list(self, store, name, _list, container, visited):
                 sub_container = self.new_container(store, name, _list, container)
@@ -126,7 +125,7 @@ class SequenceHandling(object):
                         i = int(record)
                         imax = max(i, imax)
                         _list[i] = store.peek(record, container)
-                return [ _list[i] for i in range(imax+1) ]
+                return [ _list.get(i, None) for i in range(imax+1) ]
 
         def peek_array(self, store, elemtype, container):
                 """abstract method"""

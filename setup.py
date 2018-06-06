@@ -8,7 +8,9 @@ import os.path
 
 # all requirements moved to requirements.txt
 install_requires = [] #'six', 'numpy', 'scipy', 'pandas', 'tables', 'h5py'
-extras_require = {} 
+extras_require = {}
+setup_requires = ['pytest-runner']
+tests_require = ['pytest']
 
 
 pwd = os.path.abspath(os.path.dirname(__file__))
@@ -22,7 +24,7 @@ except OSError:
 
 setup(
         name = 'rwa-python',
-        version = '0.6',
+        version = '0.7',
         description = 'HDF5-based serialization library for Python datatypes',
         long_description = long_description,
         url = 'https://github.com/DecBayComp/RWA-python',

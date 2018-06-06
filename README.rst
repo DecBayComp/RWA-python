@@ -37,6 +37,7 @@ If **RWA-python** complains about a type that cannot be serialized, a partial fi
 
 
 With Python2, the library requires explicit definitions in most cases.
+In addition, string typing is sometimes problematic. Non-ascii characters should be explicit unicode.
 
 
 Installation

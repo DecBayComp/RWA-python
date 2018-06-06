@@ -14,6 +14,12 @@ from .sequence import *
 
 
 # to_string variants
+
+def to_binary(s):
+        if isinstance(s, six.text_type):
+                s = s.encode('utf-8')
+        return string_(s)
+
 if six.PY3:
         def from_unicode(s): return s
         def from_bytes(b): return b.decode('utf-8')
@@ -22,17 +28,12 @@ if six.PY3:
                         return s
                 else:
                         return from_bytes(s)
-        def to_binary(s):
-                if isinstance(s, str):
-                        s = s.encode('utf-8')
-                return string_(s)
 else:
         import codecs
         def from_unicode(s):
                 return codecs.unicode_escape_encode(s)[0]
         def from_bytes(b): return b
         to_str = str
-        to_binary = string_
 
 to_attr = string_
 from_attr = from_bytes
@@ -48,14 +49,18 @@ def vlen_poke(service, objname, obj, container, visited=None):
         container.create_dataset(objname, data=obj, dtype=dt)
 
 def native_peek(service, container):
-        return container[...]
+        val = container[...]
+        if val.shape is (): # if scalar
+                # convert numpy.<type>_ to <type> where <type> typically is bool, int, float
+                val = val.tolist()
+        return val
 
 def binary_peek(service, container):
         return container[...].tostring()
 
 def text_peek(service, container):
         return container[...].tostring().decode('utf-8')
-        
+
 
 def mk_vlen_poke(f):
         def poke(service, objname, obj, container, visited=None):
@@ -287,13 +292,15 @@ class HDF5Store(FileStore):
                 FileStore.poke(self, objname, obj, container, visited=visited)
 
         def pokeNative(self, objname, obj, container):
-                if obj is not None:
-                        try:
-                                container.create_dataset(objname, data=obj)
-                        except:
-                                #try: self.pokeStorable(default_storable(obj), objname, obj, container)
-                                raise TypeError('unsupported type {!s} for object {}'.format(\
-                                        obj.__class__, objname))
+                if obj is None:
+                        return
+                try:
+                        #container.create_dataset(objname, data=obj)
+                        native_poke(self, objname, obj, container)
+                except:
+                        #try: self.pokeStorable(default_storable(obj), objname, obj, container)
+                        raise TypeError('unsupported type {!s} for object {}'.format(\
+                                obj.__class__, objname))
 
         def pokeVisited(self, objname, obj, container, existing, visited=None):
                 existing_container, existing_objname = existing
@@ -306,10 +313,7 @@ class HDF5Store(FileStore):
 
         def peekNative(self, record):
                 try:
-                        obj = record[...]
-                        if obj.shape is ():
-                                obj = list(obj.flat)[0]
-                        return obj
+                        return native_peek(self, record)
                 except AttributeError as e:
                         #try: self.peekStorable(default_storable(??), container)
                         raise AttributeError('hdf5.peekNative', record.name, *e.args)
