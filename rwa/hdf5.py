@@ -322,7 +322,21 @@ class HDF5Store(FileStore):
                 return None # don't know; should `tryPokeAny` instead
 
         def tryPokeAny(self, objname, obj, record, visited=None):
+		# `pokeNative` may not raise any exception with iterable objects;
+                # check for presence of `__dict__` and `__slots__`
                 try:
+                        try:
+                                obj.__dict__
+                        except AttributeError:
+                                pass # alright
+                        else:
+                                raise TypeError
+                        try:
+                                obj.__slots__
+                        except AttributeError:
+                                pass # alright
+                        else:
+                                raise TypeError
                         self.pokeNative(objname, obj, record)
                 except (KeyboardInterrupt, SystemExit):
                         raise
