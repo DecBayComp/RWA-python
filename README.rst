@@ -4,7 +4,9 @@ RWA-python
 
 **RWA-python** serializes Python datatypes and stores them in HDF5 files.
 
-Code example::
+Code example:
+
+.. code-block:: python
 
 	from rwa import HDF5Store
 
@@ -31,7 +33,9 @@ With Python3, **RWA-python** serialization is fully automatic.
 The library generates serialization schemes for most custom types.
 When deserializing objects, it also looks for and loads the modules where the corresponding types are defined.
 
-If **RWA-python** complains about a type that cannot be serialized, a partial fix consists of ignoring this datatype::
+If **RWA-python** complains about a type that cannot be serialized, a partial fix consists of ignoring this datatype:
+
+.. code-block:: python
 
 	hdf5_not_storable(type(unserializable_object))
 

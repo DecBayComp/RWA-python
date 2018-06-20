@@ -11,6 +11,7 @@ from .storable import *
 from .generic import *
 from .lazy import FileStore
 from .sequence import *
+import traceback
 
 
 # to_string variants
@@ -323,27 +324,23 @@ class HDF5Store(FileStore):
 
         def tryPokeAny(self, objname, obj, record, visited=None):
 		# `pokeNative` may not raise any exception with iterable objects;
-                # check for presence of `__dict__` and `__slots__`
+                # check for the presence of `__dict__` and `__slots__`
+                tb = self.verbose
                 try:
-                        try:
-                                obj.__dict__
-                        except AttributeError:
-                                pass # alright
-                        else:
-                                raise TypeError
-                        try:
-                                obj.__slots__
-                        except AttributeError:
-                                pass # alright
-                        else:
-                                raise TypeError
+                        for attr in ('__dict__', '__slots__'):
+                                if hasattr(obj, attr):
+                                        tb = False
+                                        # raise any exception to skip till the except block
+                                        raise TypeError
                         self.pokeNative(objname, obj, record)
                 except (KeyboardInterrupt, SystemExit):
                         raise
                 except:
-                        if six.PY2:
-                                raise
                         _type = type(obj)
+                        if six.PY2:
+                                if tb:
+                                        traceback.print_exc()
+                                raise TypeError("unsupported type {} for object '{}'".format(_type, objname))
                         storable = self.defaultStorable(_type, agnostic=self.isAgnostic(_type))
                         self.pokeStorable(storable, objname, obj, record, visited=visited)
 

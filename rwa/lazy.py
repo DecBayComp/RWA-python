@@ -205,7 +205,8 @@ class FileStore(LazyStore):
                 LazyStore.__init__(self, storables, mode=mode, **kwargs)
                 self.resource = resource
                 self.temporary = None
-                if self.writes(mode) and os.path.isfile(resource):
+                file_exists = os.path.isfile(resource)
+                if self.writes(mode) and file_exists:
                         dirname, basename = os.path.split(resource)
                         if basename[0] != '.':
                                 basename = '.' + basename
@@ -221,13 +222,20 @@ class FileStore(LazyStore):
                                 print('flushing into temporary file: {}'.format(temporary))
                         self.temporary = temporary
                         self.open_args = (temporary, )
-                else:
+                elif self.writes(mode) or file_exists:
                         self.open_args = (resource, )
+                else:
+                        # reading a missing file
+                        try:
+                                raise FileNotFoundError(resource)
+                        except NameError:
+                                import errno
+                                raise OSError(errno.ENOENT, 'file not found: {}'.format(resource))
                 self.open()
 
         def writes(self, mode):
-                return mode == 'w'
-        
+                return mode in 'aw'
+
         def close(self):
                 LazyStore.close(self)
                 if self.temporary:

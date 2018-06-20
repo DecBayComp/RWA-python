@@ -8,5 +8,6 @@ RWA-python documentation
 	:maxdepth: 2
 
 	api
+	faq
 
 .. |rwa-python| replace:: **RWA-python**
