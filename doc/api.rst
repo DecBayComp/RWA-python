@@ -35,6 +35,15 @@ rwa.lazy module
     :show-inheritance:
 
 
+rwa.sequence module
+-------------------
+
+.. automodule:: rwa.sequence
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 rwa.hdf5 module
 ---------------
 

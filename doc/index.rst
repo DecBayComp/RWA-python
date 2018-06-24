@@ -69,11 +69,15 @@ Python >= 2.7 or >= 3.5 is required.
 *pip install* will install some Python dependencies if missing, but you may still need to install the `HDF5 reference library <https://support.hdfgroup.org/downloads/index.html>`_.
 
 
+More about RWA-python
+---------------------
+
 .. toctree::
 	:maxdepth: 2
 
 	api
 	faq
+
 
 .. |rwa-python| replace:: **RWA-python**
 .. |py2| replace:: Python2
