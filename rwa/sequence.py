@@ -149,7 +149,7 @@ class SequenceHandling(object):
                                 store.poke(self.to_record_name(key), value, sub_sub_container,
                                         visited=visited)
                         try:
-                                _type = store.byPythonType(_type).asVersion().storable_type
+                                _type = store.byPythonType(first).asVersion().storable_type
                         except AttributeError:
                                 # native type
                                 _type = format_type(_type)
@@ -225,7 +225,7 @@ class SequenceHandling(object):
                         return StorableHandler(peek=self.peek_list(factory, exposes=args),
                                 poke=self.poke_list(exposes=args))
                 def dict_handler(factory, *args, **kwargs):
-                        return StorableHandler(peek=self.peek_dict(factory, exposes=args), 
+                        return StorableHandler(peek=self.peek_dict(factory, exposes=args),
                                 poke=self.poke_dict(exposes=args, **kwargs))
                 def _Counter(zipped):
                         return Counter(**dict(zipped))

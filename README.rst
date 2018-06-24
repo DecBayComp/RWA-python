@@ -4,19 +4,26 @@ RWA-python
 
 **RWA-python** serializes Python datatypes and stores them in HDF5 files.
 
-Code example:
+Code example
+------------
+
+In module *A* referenced in *sys.path*:
 
 .. code-block:: python
 
+	class CustomClass(object):
+		def __init__(self, arg=None):
+			self.attr = arg
+
+In module *B*:
+
+.. code-block:: python
+
+	from A import CustomClass
 	from rwa import HDF5Store
 
-	class CustomClass(object):
-		__slots__ = 'my_slot'
-		def __init__(self, slot=None):
-			self.my_slot = slot
-
 	# make any complex construct
-	any_object = CustomClass((CustomClass(5), dict(a=1)))
+	any_object = CustomClass((CustomClass('a'), dict(b=1)))
 
 	# serialize
 	hdf5 = HDF5Store('my_file.h5', 'w')
@@ -29,7 +36,11 @@ Code example:
 	hdf5.close()
 
 
-With Python3, **RWA-python** serialization is fully automatic.
+Introduction
+------------
+
+With Python3, **RWA-python** serialization is fully automatic for types with *__slots__* defined or such that the *__init__* constructor does not require any input argument.
+
 The library generates serialization schemes for most custom types.
 When deserializing objects, it also looks for and loads the modules where the corresponding types are defined.
 
@@ -47,10 +58,19 @@ In addition, string typing is sometimes problematic. Non-ascii characters should
 Installation
 ------------
 
-You will need Python >= 2.7 or >= 3.5.
+Python >= 2.7 or >= 3.5 is required.
+
+*pip* should work just fine:
+
 ::
 
 	pip install --user rwa-python
 
-``pip install`` will install some Python dependencies if missing, but you may still need to install the `HDF5 reference library <https://support.hdfgroup.org/downloads/index.html>`_.
+*pip install* will install some Python dependencies if missing, but you may still need to install the `HDF5 reference library <https://support.hdfgroup.org/downloads/index.html>`_.
+
+
+See also
+--------
+
+**RWA-python** is on `readthedocs<https://readthedocs.org/projects/rwa-python/>`_.
 

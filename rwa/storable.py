@@ -84,7 +84,7 @@ class Storable(object):
 
         def hasVersion(self, version):
                 return version in [ h.version for h in self.handlers ]
-                
+
         def asVersion(self, version=None):
                 handler = None
                 if version is None:
@@ -153,7 +153,7 @@ class StorableService(object):
                         if storable.python_type is not existing.python_type:
                                 raise TypeError('conflicting instances', storable.storable_type)
                 else:
-                        if pokes and self.hasPythonType(storable.python_type):
+                        if pokes and self.hasPythonType(storable.python_type, True):
                                 raise TypeError('conflicting instances', storable.python_type)
                         existing = deepcopy(storable)
                         existing._handlers = []
@@ -173,14 +173,14 @@ class StorableService(object):
                         self.by_python_type[storable.python_type] = existing
                 self.by_storable_type[storable.storable_type] = existing
 
-        def byPythonType(self, t):
-                if isinstance(t, type):
+        def byPythonType(self, t, istype=False):
+                if istype:#isinstance(t, type):
                         try:
                                 return self.by_python_type[t]
                         except KeyError:
                                 return None
                 else:
-                        raise TypeError
+                        #raise TypeError
                         try:
                                 return self.by_python_type[type(t)]
                         except KeyError:
@@ -189,8 +189,8 @@ class StorableService(object):
                                 except (AttributeError, KeyError):
                                         return None
 
-        def hasPythonType(self, t):
-                if isinstance(t, type):
+        def hasPythonType(self, t, istype=False):
+                if istype:#isinstance(t, type):
                         return t in self.by_python_type
                 else:
                         if type(t) in self.by_python_type:
@@ -210,7 +210,7 @@ class StorableService(object):
 
 
 class StoreBase(StorableService):
-        '''Proxy class to `StorableService` that defines two abstract methods to be implemented 
+        '''Proxy class to `StorableService` that defines two abstract methods to be implemented
         for each concrete store.
 
         Attributes:
@@ -231,8 +231,8 @@ class StoreBase(StorableService):
         def by_storable_type(self):
                 return self.storables.by_storable_type
 
-        def byPythonType(self, t):
-                return self.storables.byPythonType(t)
+        def byPythonType(self, t, istype=False):
+                return self.storables.byPythonType(t, istype)
 
         def hasPythonType(self, t):
                 return self.storables.hasPythonType(t)

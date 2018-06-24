@@ -101,7 +101,7 @@ class LazyPeek(object):
                                 previous, self.store.lazy = self.store.lazy, not deep
                                 try:
                                         self._value = GenericStore.peekStorable(
-                                                self.store, 
+                                                self.store,
                                                 self.storable,
                                                 self.store.container(self.locator))
                                         self._deep = deep

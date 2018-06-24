@@ -32,8 +32,13 @@ def lookup_type(storable_type):
                 _, module_name = storable_type.split('.', 1)
         else:
                 module_name = storable_type
-        type_name, module_name = \
-                [ _name[::-1] for _name in module_name[::-1].split('.', 1) ]
+        #type_name, module_name = \
+        names = [ _name[::-1] for _name in module_name[::-1].split('.', 1) ]
+        if names[1:]:
+                type_name, module_name = names
+        else:
+                type_name = names[0]
+                return eval(type_name)
         try:
                 module = importlib.import_module(module_name)
                 python_type = getattr(module, type_name)
@@ -106,15 +111,15 @@ class GenericStore(StoreBase):
 
         def pokeVisited(self, objname, obj, record, existing, visited=None):
                 if self.hasPythonType(obj):
-                        storable = self.byPythonType(type(obj)).asVersion()
+                        storable = self.byPythonType(obj).asVersion()
                         self.pokeStorable(storable, objname, obj, record, visited=visited)
                 else:
                         self.pokeNative(objname, obj, record)
 
         def poke(self, objname, obj, record, visited=None):
                 if visited is None:
-                        # `visited` is supposed to be a singleton 
-                        # and should be initialized at the top `poke` call, 
+                        # `visited` is supposed to be a singleton
+                        # and should be initialized at the top `poke` call,
                         # before it is passed to other namespaces
                         visited = dict()
                 if objname == '__dict__':
@@ -140,7 +145,7 @@ class GenericStore(StoreBase):
                                                 visited=visited)
                                 visited[id(obj)] = (record, objname)
                         if self.hasPythonType(obj):
-                                storable = self.byPythonType(type(obj)).asVersion()
+                                storable = self.byPythonType(obj).asVersion()
                                 self.pokeStorable(storable, objname, obj, record, visited=visited)
                         elif self.isNativeType(obj):
                                 self.pokeNative(objname, obj, record)
@@ -180,7 +185,7 @@ class GenericStore(StoreBase):
                         print('generating storable instance for type: {}'.format(python_type))
                 self.storables.registerStorable(default_storable(python_type, \
                                 version=version, storable_type=storable_type), **kwargs)
-                return self.byPythonType(python_type).asVersion(version)
+                return self.byPythonType(python_type, True).asVersion(version)
 
 
 # pokes
@@ -330,7 +335,7 @@ def most_exposes(python_type):
 
         Finds the attributes exposed by the objects of a given type.
 
-        Mostly Python3-only. 
+        Mostly Python3-only.
         Does not handle types which `__new__` method requires extra arguments either.
 
         Arguments:

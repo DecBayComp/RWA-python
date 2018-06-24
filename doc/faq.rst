@@ -21,7 +21,7 @@ this attribute should not list the members defined in the parent class.
 
 Below follows an example of what should NOT be done:
 
-..code-block:: python
+.. code-block:: python
 
 	class A(object):
 		__slots__ = ['A_slot']
