@@ -72,5 +72,5 @@ Python >= 2.7 or >= 3.5 is required.
 See also
 --------
 
-**RWA-python** is on `readthedocs <https://readthedocs.org/projects/rwa-python/>`_.
+**RWA-python** is on `readthedocs <https://rwa-python.readthedocs.io/en/latest/>`_.
 
