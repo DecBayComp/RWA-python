@@ -69,6 +69,19 @@ Python >= 2.7 or >= 3.5 is required.
 *pip install* will install some Python dependencies if missing, but you may still need to install the `HDF5 reference library <https://support.hdfgroup.org/downloads/index.html>`_.
 
 
+Explicitly supported datatypes
+------------------------------
+
+* any datatype supported by `h5py <http://docs.h5py.org/en/stable/faq.html#what-datatypes-are-supported>`_
+* *type*
+* sequences and collections including *tuple*, *list*, *frozenset*, *set*, *dict*, *namedtuple*, *deque*, *OrderedDict*, *Counter*, *defaultdict* and *memoryview*
+* *scipy.sparse* datatypes including *bsr_matrix*, *coo_matrix*, *csc_matrix*, *csr_matrix*, *dia_matrix*, *dok_matrix* and *lil_matrix*
+* *scipy.spatial.ConvexHull*
+* some *pandas* datatypes including *Index*, *Int64Index*, *Float64Index*, *MultiIndex*, *Series*, *DataFrame* and *Panel* (*Panel* is supported only with package *tables* available)
+
+Other datatypes are ignored, including built-in and user defined functions, class methods, etc.
+
+
 More about RWA-python
 ---------------------
 

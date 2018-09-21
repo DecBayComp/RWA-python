@@ -10,5 +10,6 @@ try:
         from . import hdf5
         from .hdf5 import hdf5_storable, hdf5_not_storable, hdf5_agnostic_modules, HDF5Store
 except ImportError:
-        pass
+        #pass
+        raise
 

@@ -1,8 +1,14 @@
 
 import os
 import six
+import traceback
 
-import h5py
+try:
+        import h5py
+except ImportError:
+        msg = 'h5py module loading failed with the error reported at the top.' \
+            + '\nThis is likely an issue with the HDF5 library; please check it is properly installed.'
+        raise ImportError(msg)
 
 from numpy import string_, ndarray#, MaskedArray
 import tempfile
@@ -11,7 +17,6 @@ from .storable import *
 from .generic import *
 from .lazy import FileStore
 from .sequence import *
-import traceback
 
 
 # to_string variants
@@ -39,39 +44,39 @@ else:
 to_attr = string_
 from_attr = from_bytes
 
-def native_poke(service, objname, obj, container, visited=None):
+def native_poke(service, objname, obj, container, *args, **kargs):
         container.create_dataset(objname, data=obj)
 
-def string_poke(service, objname, obj, container, visited=None):
+def string_poke(service, objname, obj, container, *args, **kargs):
         container.create_dataset(objname, data=to_binary(obj))
 
-def vlen_poke(service, objname, obj, container, visited=None):
+def vlen_poke(service, objname, obj, container, *args, **kargs):
         dt = h5py.special_dtype(vlen=type(obj))
         container.create_dataset(objname, data=obj, dtype=dt)
 
-def native_peek(service, container):
+def native_peek(service, container, *args, **kargs):
         val = container[...]
         if val.shape is (): # if scalar
                 # convert numpy.<type>_ to <type> where <type> typically is bool, int, float
                 val = val.tolist()
         return val
 
-def binary_peek(service, container):
+def binary_peek(service, container, *args, **kargs):
         return container[...].tostring()
 
-def text_peek(service, container):
+def text_peek(service, container, *args, **kargs):
         return container[...].tostring().decode('utf-8')
 
 
 def mk_vlen_poke(f):
-        def poke(service, objname, obj, container, visited=None):
+        def poke(service, objname, obj, container, *args, **kargs):
                 obj = f(obj)
                 dt = h5py.special_dtype(vlen=type(obj))
                 container.create_dataset(objname, data=obj, dtype=dt)
         return poke
 
 def mk_native_peek(f):
-        def peek(service, container):
+        def peek(service, container, *args, **kargs):
                 return f(container[...])
         return peek
 
@@ -89,21 +94,27 @@ def _debug(f):
                                 print(' - {}=({})'.format(a, e.args[0]))
         f.visititems(printname)
 
+
 try:
-        from pandas import read_hdf, Series, DataFrame, Panel, SparseSeries
+        from pandas import read_hdf, Series, DataFrame
 except ImportError:
         pass
 else:
-        try:
-                import tables
-        except ImportError as e:
-                import warnings
-                warnings.warn(e.msg, ImportWarning)
+        # change version numbers of the candidate new default implementation
+        _pandas_storables = []
+        for _s in pandas_storables:
+                assert not _s.handlers[1:]
+                if _s.python_type in (Series, DataFrame):
+                        _s.handlers[0].version = (2,)
+                _pandas_storables.append(_s)
+        pandas_storables = _pandas_storables
+
+        # former default implementation routines
 
         def copy_hdf(from_table, to_table, name):
                 from_table.copy(from_table, to_table, name=name)
 
-        def peek_Pandas(service, from_table):
+        def peek_Pandas(service, from_table, *args, **kargs):
                 fd, tmpfilename = tempfile.mkstemp()
                 os.close(fd)
                 try:
@@ -117,7 +128,7 @@ else:
                         os.unlink(tmpfilename)
                 return table
 
-        def poke_Pandas(service, objname, obj, to_table, visited=None):
+        def poke_Pandas(service, objname, obj, to_table, *args, **kargs):
                 fd, tmpfilename = tempfile.mkstemp()
                 os.close(fd)
                 try:
@@ -129,10 +140,35 @@ else:
                                 from_table.close()
                 finally:
                         os.unlink(tmpfilename)
-        #_debug(to_table.file)
-        pandas_storables += [Storable(Series, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas)), \
-                Storable(DataFrame, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas)), \
-                Storable(Panel, handlers=StorableHandler(peek=peek_Pandas, poke=poke_Pandas))]
+
+        default_Pandas = StorableHandler(peek=peek_Pandas, poke=poke_Pandas, version=(1,))
+
+        # test the availability of libhdf5
+        try:
+                import tables
+                import tables.hdf5extension
+                import tables.utilsextension
+                import fakemodule
+        except ImportError as e:
+                import warnings
+                warnings.warn(e.args[0], ImportWarning)
+        else:
+                #_debug(to_table.file)
+
+                _pandas_storables = []
+                for _s in pandas_storables:
+                        if _s.python_type in (Series, DataFrame):
+                                _s.handlers.append(default_Pandas)
+                        _pandas_storables.append(_s)
+                pandas_storables = _pandas_storables
+
+                try:
+                        from pandas import Panel # Panel has been flagged deprecated
+                except ImportError:
+                        pass
+                else:
+                        pandas_storables.append(Storable(Panel, handlers=default_Pandas))
+
 
 
 string_storables = [\
@@ -157,23 +193,25 @@ class SequenceV2(SequenceHandling):
                 return container.keys()
         def suitable_array_element(self, elem):
                 return True # let's delegate to `poke_array`
-        def poke_array(self, store, name, elemtype, elements, container, visited):
-                native_poke(store, name, elements, container, visited=visited)
+        def poke_array(self, store, name, elemtype, elements, container, visited, _stack):
+                native_poke(store, name, elements, container, visited, _stack)
                 return store.getRecord(name, container)
-        def peek_array(self, store, elemtype, container):
+        def peek_array(self, store, elemtype, container, _stack):
                 #if elemtype is six.text_type:
                 #       return text_peek(store, container)
                 #elif elemtype is six.binary_type:
                 #       return binary_peek(store, container)
                 #else:
-                        return native_peek(store, container)
+                        return native_peek(store, container, _stack)
 
 import copy
+_seq_storables_v1 = list(seq_storables)
 _seq_handlers_v2 = SequenceV2().base_handlers()
 seq_storables_v2 = []
 for _type, _handler in _seq_handlers_v2.items():
-        for _storable in seq_storables:
+        for _i, _storable in enumerate(_seq_storables_v1):
                 if _storable.python_type is _type:
+                        del _seq_storables_v1[_i]
                         break
         if _storable.python_type is _type:
                 _storable = copy.deepcopy(_storable)
@@ -182,6 +220,8 @@ for _type, _handler in _seq_handlers_v2.items():
         else:
                 _storable = Storable(_type, handlers=_handler)
         seq_storables_v2.append(_storable)
+if _seq_storables_v1:
+        seq_storables_v2 += _seq_storables_v1
 
 
 hdf5_storables = list(itertools.chain(\
@@ -190,6 +230,7 @@ hdf5_storables = list(itertools.chain(\
         seq_storables_v2, \
         numpy_storables, \
         sparse_storables, \
+        spatial_storables, \
         pandas_storables))
 
 
@@ -287,10 +328,10 @@ class HDF5Store(FileStore):
                 record.attrs.create(attr, to_attr(val))
                 #print(('hdf5.setRecordAttr', record.name, attr, record.attrs[attr])) # DEBUG
 
-        def poke(self, objname, obj, container=None, visited=None):
+        def poke(self, objname, obj, container=None, visited=None, _stack=None):
                 if container is None:
                         container = self.store
-                FileStore.poke(self, objname, obj, container, visited=visited)
+                FileStore.poke(self, objname, obj, container, visited=visited, _stack=_stack)
 
         def pokeNative(self, objname, obj, container):
                 if obj is None:
@@ -303,14 +344,14 @@ class HDF5Store(FileStore):
                         raise TypeError('unsupported type {!s} for object {}'.format(\
                                 obj.__class__, objname))
 
-        def pokeVisited(self, objname, obj, container, existing, visited=None):
+        def pokeVisited(self, objname, obj, container, existing, *args, **kwargs):
                 existing_container, existing_objname = existing
                 container[objname] = existing_container[existing_objname] # HDF5 hard link
 
-        def peek(self, objname, record=None):
+        def peek(self, objname, record=None, _stack=None):
                 if record is None:
                         record = self.store
-                return FileStore.peek(self, objname, record)
+                return FileStore.peek(self, objname, record, _stack=_stack)
 
         def peekNative(self, record):
                 try:
@@ -322,7 +363,7 @@ class HDF5Store(FileStore):
         def isNativeType(self, obj):
                 return None # don't know; should `tryPokeAny` instead
 
-        def tryPokeAny(self, objname, obj, record, visited=None):
+        def tryPokeAny(self, objname, obj, record, visited=None, _stack=None):
 		# `pokeNative` may not raise any exception with iterable objects;
                 # check for the presence of `__dict__` and `__slots__`
                 tb = self.verbose
@@ -342,7 +383,7 @@ class HDF5Store(FileStore):
                                         traceback.print_exc()
                                 raise TypeError("unsupported type {} for object '{}'".format(_type, objname))
                         storable = self.defaultStorable(_type, agnostic=self.isAgnostic(_type))
-                        self.pokeStorable(storable, objname, obj, record, visited=visited)
+                        self.pokeStorable(storable, objname, obj, record, visited=visited, _stack=_stack)
 
         def isAgnostic(self, storable_type):
                 modules = []

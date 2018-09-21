@@ -101,11 +101,11 @@ class Storable(object):
                                 raise KeyError('no such version number: {}'.format(version))
                 return handler
 
-        def poke(self, *vargs, **kwargs):
-                self.asVersion(kwargs.pop('version', None)).poke(*vargs, **kwargs)
+        def poke(self, *args, **kwargs):
+                self.asVersion(kwargs.pop('version', None)).poke(*args, **kwargs)
 
-        def peek(self, *vargs, **kwargs):
-                return self.asVersion(kwargs.pop('version', None)).peek(*vargs, **kwargs)
+        def peek(self, *args, **kwargs):
+                return self.asVersion(kwargs.pop('version', None)).peek(*args, **kwargs)
 
 
 def format_type(python_type, agnostic=False):
@@ -246,7 +246,7 @@ class StoreBase(StorableService):
         def registerStorable(self, storable, **kwargs):
                 self.storables.registerStorable(storable, **kwargs)
 
-        def peek(self, objname, container):
+        def peek(self, objname, container, _stack=None):
                 '''Reads from a container.
 
                 Arguments:
@@ -255,6 +255,8 @@ class StoreBase(StorableService):
 
                         container (any): address of the object in the store.
 
+                        _stack (CallStack): stack of `peek` calls.
+
                 Returns:
 
                         any: deserialized object.
@@ -262,7 +264,7 @@ class StoreBase(StorableService):
                 '''
                 raise NotImplementedError('abstract method')
 
-        def poke(self, objname, obj, container, visited=None):
+        def poke(self, objname, obj, container, visited=None, _stack=None):
                 '''Writes in a container.
 
                 Arguments:
@@ -274,6 +276,8 @@ class StoreBase(StorableService):
                         container (any): address of the object in the store.
 
                         visited (dict): already seriablized objects.
+
+                        _stack (CallStack): stack of `poke` calls.
 
                 '''
                 raise NotImplementedError('abstract method')
@@ -325,4 +329,69 @@ class TypeErrorWithAlternative(TypeError):
                 part2 = part2.format(use, instead_of, use, use, instead_of, use, instead_of, instead_of, use)
                 return part1 + part2
 
+
+class CallStack(object):
+        """
+        Stack of `peek` or `poke` calls.
+
+        (De-)serialized object names are recorded so that the top :meth:`~StoreBase.peek` or
+        :meth:`~StoreBase.poke` call can report the stack of object names till that of the object
+        that raised an exception.
+
+        Each generic :meth:`~StoreBase.peek` or :meth:`~StoreBase.poke` call should first get the
+        pointer, call the :meth:`add` method (that actually returns the pointer) and then set the
+        pointer back to its original value before each child :meth:`~StoreBase.peek` or
+        :meth:`~StoreBase.poke` call.
+        """
+        __slots__ = ('stack',)
+        def __init__(self):
+                self.stack = []
+        def add(self, record):
+                ptr = self.pointer
+                self.stack.append(record)
+                return ptr
+        @property
+        def pointer(self):
+                return len(self.stack)
+        @pointer.setter
+        def pointer(self, ptr):
+                if not isinstance(ptr, int) or ptr < 0 or len(self.stack) < ptr:
+                        raise ValueError('wrong pointer')
+                self.stack = self.stack[:ptr]
+        def __repr__(self):
+                return 'CallStack'+str(self.stack)
+        def __str__(self):
+                if not self.stack:
+                        return ''
+                else:
+                        intro = 'In: '
+                        first_tab = ' ' * len(intro)
+                        prefix = '|- '
+                        tab = ' ' * len(prefix)
+                        first_line = intro + self.stack[0]
+                        next_lines = [ ''.join((first_tab, tab*i, prefix, record))
+                                        for i, record in enumerate(self.stack[1:]) ]
+                        return '\n'.join([first_line] + next_lines)
+        def exception(self, exc):
+                return type(exc)('\n'.join((exc.args[0], str(self))), *exc.args[1:])
+        def clear(self):
+                self.stack = []
+        def __nonzero__(self):
+                return bool(self.stack)
+        def __len__(self):
+                return len(self.stack)
+        def __getitem__(self, i):
+                return self.stack[i]
+        def __setitem__(self, i, record):
+                self.stack[i] = record
+        def __delitem__(self, record):
+                self.stack.delete(record)
+        def __reversed__(self):
+                return reversed(self.stack)
+        def __contains__(self, record):
+                return record in self.stack
+        def __missing__(self, i):
+                return self.stack.__missing__(i)
+        def pop(self):
+                return self.stack.pop()
 

@@ -4,6 +4,7 @@ import rwa.generic as generic
 from threading import RLock
 import os
 import shutil
+import copy
 
 
 class LazyStore(GenericStore):
@@ -48,24 +49,24 @@ class LazyStore(GenericStore):
         def __close__(self, handle):
                 handle.close()
 
-        def peek(self, objname, container, lazy=None):
+        def peek(self, objname, container, lazy=None, **kwargs): # `_stack` has to be keyworded
                 if lazy is None:
-                        return GenericStore.peek(self, objname, container)
+                        return GenericStore.peek(self, objname, container, **kwargs)
                 else:
                         try:
                                 past_value, self.lazy = self._lazy, lazy
-                                return GenericStore.peek(self, objname, container)
+                                return GenericStore.peek(self, objname, container, **kwargs)
                         finally:
                                 self._lazy = past_value
 
-        def peekStorable(self, storable, record):
+        def peekStorable(self, storable, record, *args, **kwargs):
                 if self.lazy:
-                        return self._lazy(self, storable, record)
+                        return self._lazy(self, storable, record, *args, **kwargs)
                 else:
-                        return GenericStore.peekStorable(self, storable, record)
+                        return GenericStore.peekStorable(self, storable, record, *args, **kwargs)
 
-        def poke(self, objname, obj, record, visited=None):
-                GenericStore.poke(self, objname, lazyvalue(obj, deep=True), record, visited)
+        def poke(self, objname, obj, record, *args, **kwargs):
+                GenericStore.poke(self, objname, lazyvalue(obj, deep=True), record, *args, **kwargs)
 
         def locator(self, record):
                 return record
@@ -85,13 +86,14 @@ class LazyStore(GenericStore):
 
 
 class LazyPeek(object):
-        __slots__ = ('storable', 'store', 'locator', '_value', '_deep')
+        __slots__ = ('storable', 'store', 'locator', '_value', '_deep', '_stack')
 
-        def __init__(self, store, storable, container):
+        def __init__(self, store, storable, container, _stack=None):
                 self.storable = storable
                 self.store = store
                 self.locator = store.locator(container)
                 self._value = self._deep = None
+                self._stack = copy.copy(_stack)
 
         def peek(self, deep=False, block=True):
                 if self._value is None or (deep and not self._deep):
@@ -103,8 +105,13 @@ class LazyPeek(object):
                                         self._value = GenericStore.peekStorable(
                                                 self.store,
                                                 self.storable,
-                                                self.store.container(self.locator))
+                                                self.store.container(self.locator),
+                                                _stack=self._stack)
                                         self._deep = deep
+                                except (SystemExit, KeyboardInterrupt):
+                                        raise
+                                except Exception as e:
+                                        raise self._stack.exception(e)
                                 finally:
                                         self.store.lazy = previous
                         finally:
@@ -127,7 +134,8 @@ class LazyPeek(object):
 
         def permissive(self, true=True):
                 if true:
-                        new = PermissivePeek(self.store, self.storable, self.container)
+                        new = PermissivePeek(self.store, self.storable, self.container,
+                                _stack=self._stack)
                         new._value, new._deep = self._value, self._deep
                         return new
                 else:
@@ -140,7 +148,8 @@ class PermissivePeek(LazyPeek):
                 if true:
                         return self
                 else:
-                        new = LazyPeek(self.store, self.storable, self.container)
+                        new = LazyPeek(self.store, self.storable, self.container,
+                                _stack=self._stack)
                         new._value, new._deep = self._value, self._deep
                         return new
 
@@ -261,9 +270,9 @@ def _issubclass(a, b):
 
 
 # overwrites
-def peek_assoc(s, c):
+def peek_assoc(s, c, *args, **kwargs):
         # fully peeks the first elements
-        items = [ lazyvalue(a) for a in generic.peek_assoc(s, c) ]
+        items = [ lazyvalue(a) for a in generic.peek_assoc(s, c, *args, **kwargs) ]
         return [ (lazyvalue(a, deep=True), b) for a, b in items ]
 
 import collections
@@ -284,7 +293,7 @@ else:
         _overwrites[pandas.Index] = list
 
 def _wrap(f):
-        return lambda s, c: f(peek_assoc(s, c))
+        return lambda s, c, *args, **kwargs: f(peek_assoc(s, c, *args, **kwargs))
 
 def _peek(_type):
         strategy = _overwrites[_type]

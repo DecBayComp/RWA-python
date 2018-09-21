@@ -47,8 +47,12 @@ def lookup_type(storable_type):
         return python_type
 
 
+def _add_to_stack(stack, element):
+        return stack if stack is None else stack + (element,)
+
+
 class GenericStore(StoreBase):
-        __slots__ = ('verbose',)
+        __slots__ = ('verbose', '_stack_active')
 
         def __init__(self, storables, verbose=False):
                 StoreBase.__init__(self, storables)
@@ -93,9 +97,9 @@ class GenericStore(StoreBase):
                 """abstract method"""
                 raise TypeError('record not supported')
 
-        def pokeStorable(self, storable, objname, obj, container, visited=None):
+        def pokeStorable(self, storable, objname, obj, container, visited=None, _stack=None):
                 #print((objname, storable.storable_type)) # debug
-                storable.poke(self, objname, obj, container, visited=visited)
+                storable.poke(self, objname, obj, container, visited=visited, _stack=_stack)
                 try:
                         record = self.getRecord(objname, container)
                 except KeyError:
@@ -109,50 +113,76 @@ class GenericStore(StoreBase):
                         if storable.version is not None:
                                 self.setRecordAttr('version', from_version(storable.version), record)
 
-        def pokeVisited(self, objname, obj, record, existing, visited=None):
+        def pokeVisited(self, objname, obj, record, existing, visited=None, _stack=None):
                 if self.hasPythonType(obj):
                         storable = self.byPythonType(obj).asVersion()
-                        self.pokeStorable(storable, objname, obj, record, visited=visited)
+                        self.pokeStorable(storable, objname, obj, record, visited=visited, \
+                                _stack=_stack)
                 else:
-                        self.pokeNative(objname, obj, record)
-
-        def poke(self, objname, obj, record, visited=None):
-                if visited is None:
-                        # `visited` is supposed to be a singleton
-                        # and should be initialized at the top `poke` call,
-                        # before it is passed to other namespaces
-                        visited = dict()
-                if objname == '__dict__':
-                        # expand the content of the `__dict__` dictionary
-                        __dict__ = obj
-                        for objname, obj in __dict__.items():
-                                self.poke(objname, obj, record, visited=visited)
-                elif obj is not None:
-                        if self.verbose:
-                                if self.hasPythonType(obj):
-                                        typetype = 'storable'
-                                else:   typetype = 'native'
-                                print('writing `{}` ({} type: {})'.format(objname, \
-                                        typetype, type(obj).__name__))
-                        objname = self.formatRecordName(objname)
-                        if isreference(obj):
-                                try:
-                                        previous = visited[id(obj)]
-                                except KeyError:
-                                        pass
-                                else:
-                                        return self.pokeVisited(objname, obj, record, previous, \
-                                                visited=visited)
-                                visited[id(obj)] = (record, objname)
-                        if self.hasPythonType(obj):
-                                storable = self.byPythonType(obj).asVersion()
-                                self.pokeStorable(storable, objname, obj, record, visited=visited)
-                        elif self.isNativeType(obj):
+                        try:
                                 self.pokeNative(objname, obj, record)
-                        else:
-                                self.tryPokeAny(objname, obj, record, visited=visited)
+                        except (SystemExit, KeyboardInterrupt):
+                                raise
+                        except:
+                                self.dump_stack(_stack)
+                                raise
 
-        def tryPokeAny(self, objname, obj, record, visited=None):
+        def poke(self, objname, obj, record, visited=None, _stack=None):
+                top_call = _stack is None
+                if top_call:
+                        _stack = CallStack()
+                try:
+                        if visited is None:
+                                # `visited` is supposed to be a singleton
+                                # and should be initialized at the top `poke` call,
+                                # before it is passed to other namespaces
+                                visited = dict()
+                        if objname == '__dict__':
+                                ptr = _stack.pointer
+                                # expand the content of the `__dict__` dictionary
+                                __dict__ = obj
+                                for objname, obj in __dict__.items():
+                                        self.poke(objname, obj, record, visited=visited, _stack=_stack)
+                                        # rewind the stack up to __dict__'s parent
+                                        _stack.pointer = ptr
+                        elif obj is not None:
+                                ptr = _stack.add(objname)
+                                if self.verbose:
+                                        if self.hasPythonType(obj):
+                                                typetype = 'storable'
+                                        else:   typetype = 'native'
+                                        print('writing `{}` ({} type: {})'.format(objname, \
+                                                typetype, type(obj).__name__))
+                                objname = self.formatRecordName(objname)
+                                if isreference(obj):
+                                        try:
+                                                previous = visited[id(obj)]
+                                        except KeyError:
+                                                pass
+                                        else:
+                                                return self.pokeVisited(objname, obj, record, previous, \
+                                                        visited=visited, _stack=_stack)
+                                        visited[id(obj)] = (record, objname)
+                                if self.hasPythonType(obj):
+                                        storable = self.byPythonType(obj).asVersion()
+                                        self.pokeStorable(storable, objname, obj, record, visited=visited, \
+                                                _stack=_stack)
+                                elif self.isNativeType(obj):
+                                        self.pokeNative(objname, obj, record)
+                                else:
+                                        self.tryPokeAny(objname, obj, record, visited=visited, \
+                                                _stack=_stack)
+                                # rewind the stack
+                                _stack.pointer = ptr
+                except (SystemExit, KeyboardInterrupt):
+                        raise
+                except Exception as e:
+                        if top_call:
+                                raise _stack.exception(e)
+                        else:
+                                raise
+
+        def tryPokeAny(self, objname, obj, record, visited=None, _stack=None):
                 """abstract method"""
                 raise NotImplementedError('abstract method')
 
@@ -160,23 +190,37 @@ class GenericStore(StoreBase):
                 """abstract method"""
                 raise TypeError('record not supported')
 
-        def peekStorable(self, storable, record):
-                return storable.peek(self, record)
+        def peekStorable(self, storable, record, _stack=None):
+                return storable.peek(self, record, _stack=_stack)
 
-        def peek(self, objname, container):
-                record = self.getRecord(self.formatRecordName(objname), container)
-                if self.isStorable(record):
-                        t = self.getRecordAttr('type', record)
-                        v = self.getRecordAttr('version', record)
-                        try:
-                                #print((objname, self.byStorableType(t).storable_type)) # debugging
-                                storable = self.byStorableType(t).asVersion(v)
-                        except KeyError:
-                                storable = self.defaultStorable(storable_type=t, version=to_version(v))
-                        return self.peekStorable(storable, record)
-                else:
-                        #print(objname) # debugging
-                        return self.peekNative(record)
+        def peek(self, objname, container, _stack=None):
+                top_call = _stack is None
+                if top_call:
+                        _stack = CallStack()
+                try:
+                        ptr = _stack.add(objname)
+                        record = self.getRecord(self.formatRecordName(objname), container)
+                        if self.isStorable(record):
+                                t = self.getRecordAttr('type', record)
+                                v = self.getRecordAttr('version', record)
+                                try:
+                                        #print((objname, self.byStorableType(t).storable_type)) # debugging
+                                        storable = self.byStorableType(t).asVersion(v)
+                                except KeyError:
+                                        storable = self.defaultStorable(storable_type=t, version=to_version(v))
+                                obj = self.peekStorable(storable, record, _stack=_stack)
+                        else:
+                                #print(objname) # debugging
+                                obj = self.peekNative(record)
+                        _stack.pointer = ptr
+                        return obj
+                except (SystemExit, KeyboardInterrupt):
+                        raise
+                except Exception as e:
+                        if top_call:
+                                raise _stack.exception(e)
+                        else:
+                                raise
 
         def defaultStorable(self, python_type=None, storable_type=None, version=None, **kwargs):
                 if python_type is None:
@@ -190,21 +234,23 @@ class GenericStore(StoreBase):
 
 # pokes
 def poke(exposes):
-        def _poke(store, objname, obj, container, visited=None):
+        def _poke(store, objname, obj, container, visited=None, _stack=None):
                 try:
                         sub_container = store.newContainer(objname, obj, container)
                 except:
                         raise ValueError('generic poke not supported by store')
+                #_stack = _add_to_stack(_stack, objname)
                 for iobjname in exposes:
                         try:
                                 iobj = getattr(obj, iobjname)
                         except AttributeError:
                                 pass
                         else:
-                                store.poke(iobjname, iobj, sub_container, visited=visited)
+                                store.poke(iobjname, iobj, sub_container, visited=visited, \
+                                        _stack=_stack)
         return _poke
 
-def poke_assoc(store, objname, assoc, container, visited=None):
+def poke_assoc(store, objname, assoc, container, visited=None, _stack=None):
         try:
                 sub_container = store.newContainer(objname, assoc, container)
         except:
@@ -218,7 +264,7 @@ def poke_assoc(store, objname, assoc, container, visited=None):
                         verbose = store.verbose # save state
                         for obj in assoc:
                                 store.poke(str(escaped_key_counter), obj, sub_container, \
-                                        visited=visited)
+                                        visited=visited, _stack=_stack)
                                 escaped_key_counter += 1
                                 if store.verbose:
                                         reported_item_counter += 1
@@ -228,7 +274,8 @@ def poke_assoc(store, objname, assoc, container, visited=None):
                         store.verbose = verbose # restore state
                 else:
                         for iobjname, iobj in assoc:
-                                store.poke(iobjname, iobj, sub_container, visited=visited)
+                                store.poke(iobjname, iobj, sub_container, visited=visited, \
+                                        _stack=_stack)
         except TypeError as e:
                 msg = 'wrong type for keys in associative list'
                 if e.args[0].startswith(msg):
@@ -253,32 +300,32 @@ def default_peek(python_type, exposes):
         def missing(attr):
                 return AttributeError("can't set attribute '{}' ({})".format(attr, python_type))
         if with_args:
-                def peek(store, container):
+                def peek(store, container, _stack=None):
                         state = []
                         for attr in exposes: # force order instead of iterating over `container`
                                 #print((attr, attr in container)) # debugging
                                 if attr in container:
-                                        state.append(store.peek(attr, container))
+                                        state.append(store.peek(attr, container, _stack=_stack))
                                 else:
                                         state.append(None)
                         return make(state)
         elif '__dict__' in exposes:
-                def peek(store, container):
+                def peek(store, container, _stack=None):
                         obj = make()
                         for attr in container:
-                                val = store.peek(attr, container)
+                                val = store.peek(attr, container, _stack=_stack)
                                 try:
                                         setattr(obj, attr, val)
                                 except AttributeError:
                                         raise missing(attr)
                         return obj
         else:
-                def peek(store, container):
+                def peek(store, container, _stack=None):
                         obj = make()
                         for attr in exposes: # force order instead of iterating over `container`
                                 #print((attr, attr in container)) # debugging
                                 if attr in container:
-                                        val = store.peek(attr, container)
+                                        val = store.peek(attr, container, _stack=_stack)
                                 else:
                                         val = None
                                 try:
@@ -289,32 +336,36 @@ def default_peek(python_type, exposes):
         return peek
 
 def unsafe_peek(init):
-        def peek(store, container):
-                return init(*[ store.peek(attr, container) for attr in container ])
+        def peek(store, container, _stack=None):
+                return init(*[ store.peek(attr, container, _stack=_stack) for attr in container ])
         return peek
 
-def peek_with_kwargs(init, vargs=[]):
-        def peek(store, container):
+def peek_with_kwargs(init, args=[]):
+        def peek(store, container, _stack=None):
                 return init(\
-                        *[ store.peek(attr, container) for attr in vargs ], \
-                        **dict([ (attr, store.peek(attr, container)) \
-                                for attr in container if attr not in vargs ]))
+                        *[ store.peek(attr, container, _stack=_stack) for attr in args ], \
+                        **dict([ (attr, store.peek(attr, container, _stack=_stack)) \
+                                for attr in container if attr not in args ]))
         return peek
 
-def peek(init, exposes):
-        def _peek(store, container):
-                return init(*[ store.peek(objname, container) for objname in exposes ])
+def peek(init, exposes, debug=False):
+        def _peek(store, container, _stack=None):
+                args = [ store.peek(objname, container, _stack=_stack) \
+                        for objname in exposes ]
+                if debug:
+                        print(args)
+                return init(*args)
         return _peek
 
-def peek_assoc(store, container):
+def peek_assoc(store, container, _stack=None):
         assoc = []
         try:
                 if store.getRecordAttr('key', container) == 'escaped':
                         for i in container:
-                                assoc.append(store.peek(i, container))
+                                assoc.append(store.peek(i, container, _stack=_stack))
                 else:
                         for i in container:
-                                assoc.append((store.strRecord(i, container), store.peek(i, container)))
+                                assoc.append((store.strRecord(i, container), store.peek(i, container, _stack=_stack)))
                 #print(assoc) # debugging
         except TypeError as e:
                 try:
@@ -442,7 +493,7 @@ def default_storable(python_type, exposes=None, version=None, storable_type=None
                 poke=poke(exposes), peek=peek(python_type, exposes)))
 
 
-def kwarg_storable(python_type, exposes=None, version=None, storable_type=None, init=None, vargs=[]):
+def kwarg_storable(python_type, exposes=None, version=None, storable_type=None, init=None, args=[]):
         warnings.warn('kwarg_storable', DeprecationWarning)
         if init is None:
                 init = python_type
@@ -453,7 +504,7 @@ def kwarg_storable(python_type, exposes=None, version=None, storable_type=None, 
                         # take __dict__ and sort out the class methods
                         raise AttributeError('either define the `exposes` argument or the `__slots__` attribute for type: {!r}'.format(python_type))
         return Storable(python_type, key=storable_type, handlers=StorableHandler(version=version, \
-                poke=poke(exposes), peek=peek_with_kwargs(init, vargs), exposes=exposes))
+                poke=poke(exposes), peek=peek_with_kwargs(init, args), exposes=exposes))
 
 
 # standard sequences
@@ -462,20 +513,20 @@ def seq_to_assoc(seq):
 def assoc_to_list(assoc):
         return [ x for _, x in sorted(assoc, key=lambda a: int(a[0])) ]
 
-def poke_seq(v, n, s, c, visited=None):
-        poke_assoc(v, n, seq_to_assoc(s), c, visited=visited)
-def poke_dict(v, n, d, c, visited=None):
-        poke_assoc(v, n, d.items(), c, visited=visited)
-def peek_list(s, c):
-        return assoc_to_list(peek_assoc(s, c))
-def peek_tuple(s, c):
-        return tuple(peek_list(s, c))
-def peek_set(s, c):
-        return set(peek_list(s, c))
-def peek_frozenset(s, c):
-        return frozenset(peek_list(s, c))
-def peek_dict(s, c):
-        items = peek_assoc(s, c)
+def poke_seq(v, n, s, c, visited=None, _stack=None):
+        poke_assoc(v, n, seq_to_assoc(s), c, visited=visited, _stack=_stack)
+def poke_dict(v, n, d, c, visited=None, _stack=None):
+        poke_assoc(v, n, d.items(), c, visited=visited, _stack=_stack)
+def peek_list(s, c, _stack=None):
+        return assoc_to_list(peek_assoc(s, c, _stack=_stack))
+def peek_tuple(s, c, _stack=None):
+        return tuple(peek_list(s, c, _stack=_stack))
+def peek_set(s, c, _stack=None):
+        return set(peek_list(s, c, _stack=_stack))
+def peek_frozenset(s, c, _stack=None):
+        return frozenset(peek_list(s, c, _stack=_stack))
+def peek_dict(s, c, _stack=None):
+        items = peek_assoc(s, c, _stack=_stack)
         #if items:
         #       if not all([ len(i) == 2 for i in items ]):
         #               print(items)
@@ -484,10 +535,10 @@ def peek_dict(s, c):
         #               print(items)
         #               raise ValueError('duplicate keys')
         return dict(items)
-def peek_deque(s, c):
-        return deque(peek_list(s, c))
-def peek_OrderedDict(s, c):
-        return OrderedDict(peek_assoc(s, c))
+def peek_deque(s, c, _stack=None):
+        return deque(peek_list(s, c, _stack=_stack))
+def peek_OrderedDict(s, c, _stack=None):
+        return OrderedDict(peek_assoc(s, c, _stack=_stack))
 
 seq_storables = [Storable(tuple, handlers=StorableHandler(poke=poke_seq, peek=peek_tuple)), \
         Storable(list, handlers=StorableHandler(poke=poke_seq, peek=peek_list)), \
@@ -495,16 +546,17 @@ seq_storables = [Storable(tuple, handlers=StorableHandler(poke=poke_seq, peek=pe
         Storable(set, handlers=StorableHandler(poke=poke_seq, peek=peek_set)), \
         Storable(dict, handlers=StorableHandler(poke=poke_dict, peek=peek_dict)), \
         Storable(deque, handlers=StorableHandler(poke=poke_seq, peek=peek_deque)), \
-        Storable(OrderedDict, handlers=StorableHandler(poke=poke_dict, peek=peek_OrderedDict))]
+        Storable(OrderedDict, handlers=StorableHandler(poke=poke_dict, peek=peek_OrderedDict)), \
+        default_storable(memoryview, ['obj'])]
 
 
 # helper for tagging unserializable types
-def fake_poke(*vargs, **kwargs):
+def fake_poke(*args, **kwargs):
         pass
 def fail_peek(unsupported_type):
-        helper = "unserializable type '{}'\n".format(unsupported_type)
-        def peek(*vargs, **kwargs):
-                def f(*vargs, **kwargs):
+        helper = "cannot deserializable type '{}'\n".format(unsupported_type)
+        def peek(*args, **kwargs):
+                def f(*args, **kwargs):
                         raise TypeError(helper)
                 return f
         return peek
@@ -521,7 +573,7 @@ def not_storable(_type):
                 Storable: storable instance that does not poke.
 
         """
-        return Storable(_type, handlers=StorableHandler(poke=fake_poke, peek=fail_peek))
+        return Storable(_type, handlers=StorableHandler(poke=fake_poke, peek=fail_peek(_type)))
 
 
 class _Class(object):
@@ -545,12 +597,12 @@ function_storables = [ not_storable(_type) for _type in frozenset(( \
 
 
 def poke_native(getstate):
-        def poke(service, objname, obj, container, visited=None):
+        def poke(service, objname, obj, container, visited=None, _stack=None):
                 service.pokeNative(objname, getstate(obj), container)
         return poke
 
 def peek_native(make):
-        def peek(service, container):
+        def peek(service, container, _stack=None):
                 return make(service.peekNative(container))
         return peek
 
@@ -601,7 +653,7 @@ else:
 
         coo_exposes = ['shape', 'data', 'row', 'col']
         def mk_coo(shape, data, row, col):
-                return bsr_matrix((data, (row, col)), shape=shape)
+                return coo_matrix((data, (row, col)), shape=shape)
         coo_handler = handler(mk_coo, coo_exposes)
 
         csc_exposes = ['shape', 'data', 'indices', 'indptr']
@@ -620,25 +672,27 @@ else:
         dia_handler = handler(mk_dia, dia_exposes)
 
         # previously
-        def dok_recommend(*vargs):
+        def dok_recommend(*args, **kwargs):
                 raise TypeErrorWithAlternative('dok_matrix', 'coo_matrix')
         dok_handler = StorableHandler(poke=dok_recommend, peek=dok_recommend)
         # now
-        def dok_poke(service, matname, mat, container, visited=None):
-                coo_handler.poke(service, matname, mat.tocoo(), container, visited=visited)
-        def dok_peek(service, container):
-                return coo_handler.peek(service, container).todok()
+        def dok_poke(service, matname, mat, container, visited=None, _stack=None):
+                coo_handler.poke(service, matname, mat.tocoo(), container, visited=visited, \
+                        _stack=_stack)
+        def dok_peek(service, container, _stack=None):
+                return coo_handler.peek(service, container, _stack=_stack).todok()
         dok_handler = StorableHandler(poke=dok_poke, peek=dok_peek)
 
         # previously
-        def lil_recommend(*vargs):
+        def lil_recommend(*args, **kwargs):
                 raise TypeErrorWithAlternative('lil_matrix', ('csr_matrix', 'csc_matrix'))
         lil_handler = StorableHandler(poke=lil_recommend, peek=lil_recommend)
         # now
-        def lil_poke(service, matname, mat, container, visited=None):
-                csr_handler.poke(service, matname, mat.tocsr(), container, visited=visited)
-        def lil_peek(service, container):
-                return csr_handler.peek(service, container).tolil()
+        def lil_poke(service, matname, mat, container, visited=None, _stack=None):
+                csr_handler.poke(service, matname, mat.tocsr(), container, visited=visited, \
+                        _stack=_stack)
+        def lil_peek(service, container, _stack=None):
+                return csr_handler.peek(service, container, _stack=_stack).tolil()
         lil_handler = StorableHandler(poke=lil_poke, peek=lil_peek)
 
 
@@ -656,12 +710,12 @@ try:
 except ImportError:
         spatial_storables = []
 else:
-        # scipy.sparse storable instances
+        # scipy.sparse storable instances for Python2 (Python3 can autoserialize ConvexHull)
         ConvexHull_exposes = ['points', 'vertices', 'simplices', 'neighbors', 'equations', 'coplanar', 'area', 'volume']
         def mk_ConvexHull(points, vertices, simplices, neighbors, equations, coplanar, area, volume):
                 hull = scipy.spatial.qhull.ConvexHull(points)
                 try:
-                        ok = numpy.isclose(hull.vertices, vertices)
+                        ok = np.all(numpy.isclose(hull.vertices, vertices))
                 except:
                         ok = False
                 if not ok:
@@ -677,15 +731,76 @@ try:
 except ImportError:
         pandas_storables = []
 else:
-        def poke_index(service, name, obj, container, visited=None):
-                poke_seq(service, name, obj.tolist(), container, visited=visited)
-        def peek_index(service, container):
-                return pandas.Index(peek_list(service, container))
+        def poke_index(service, name, obj, container, visited=None, _stack=None):
+                poke_seq(service, name, obj.tolist(), container, visited=visited, _stack=_stack)
+        def peek_index(init=pandas.Index):
+                def pandas_index_peek(service, container, _stack=None):
+                        return init(peek_list(service, container, _stack=_stack))
+                return pandas_index_peek
+        peek_multiindex = peek_with_kwargs(pandas.MultiIndex)
+        #poke_multiindex = poke(['levels', 'labels', 'names'])
+        # convert all the pandas.core.base.FrozenList into tuples
+        def poke_multiindex(service, ixname, ix, parent_container, visited=None, _stack=None):
+                try:
+                        container = service.newContainer(ixname, ix, parent_container)
+                except:
+                        raise ValueError('generic poke not supported by store')
+                for attrname in ('levels', 'labels'):
+                        attr = tuple( tuple(item) for item in getattr(ix, attrname) )
+                        service.poke(attrname, attr, container, visited=visited, _stack=_stack)
+                attrname = 'names'
+                attr = tuple( getattr(ix, attrname) )
+                service.poke(attrname, attr, container, visited=visited, _stack=_stack)
 
-        # as such in Python3; force it in Python2 to be the same
+        # as such in latest pandas versions; force it in old (Python2?) pandas versions to be the same
         pandas_storables = [Storable(pandas.Index, \
-                key='Python.pandas.core.index.Index', \
-                handlers=StorableHandler(poke=poke_index, peek=peek_index))]
+                 key='Python.pandas.core.index.Index', \
+                 handlers=StorableHandler(poke=poke_index, peek=peek_index())), \
+                Storable(pandas.Int64Index, \
+                 key='Python.pandas.core.index.Int64Index', \
+                 handlers=StorableHandler(poke=poke_index, peek=peek_index(pandas.Int64Index)))]
+
+        try:
+                # UInt64Index is mentioned in the documentation but is missing here
+                pandas_storables.append( \
+                        Storable(pandas.UInt64Index, \
+                         key='Python.pandas.core.index.UInt64Index', \
+                         handlers=StorableHandler(poke=poke_index, peek=peek_index(pandas.UInt64Index))))
+        except AttributeError:
+                pass
+
+        pandas_storables += [ \
+                Storable(pandas.Float64Index, \
+                 key='Python.pandas.core.index.Float64Index', \
+                 handlers=StorableHandler(poke=poke_index, peek=peek_index(pandas.Float64Index))), \
+                Storable(pandas.MultiIndex, \
+                 key='Python.pandas.core.index.MultiIndex', \
+                 handlers=StorableHandler(poke=poke_multiindex, peek=peek_multiindex))]
+
+        # `values` is not necessarily the underlying data; may be a coerced representation instead
+        poke_series = poke(['data', 'index'])
+        peek_series = peek(pandas.Series, ['data', 'index'], debug=True)
+        if six.PY2:
+                def poke_series(service, sname, s, parent_container, visited=None, _stack=None):
+                        try:
+                                container = service.newContainer(sname, s, parent_container)
+                        except:
+                                raise ValueError('generic poke not supported by store')
+                        service.poke('data', s.values, container, visited=visited, _stack=_stack)
+                        service.poke('index', s.index, container, visited=visited, _stack=_stack)
+        # `poke_dataframe` is similar to `poke` but converts part of the dataframe into
+        # an ordered dictionnary of columns
+        def poke_dataframe(service, dfname, df, parent_container, visited=None, _stack=None):
+                try:
+                        container = service.newContainer(dfname, df, parent_container)
+                except:
+                        raise ValueError('generic poke not supported by store')
+                data = OrderedDict([ (colname, df[colname].values) for colname in df.columns ])
+                service.poke('data', data, container, visited=visited, _stack=_stack)
+                service.poke('index', df.index, container, visited=visited, _stack=_stack)
+        peek_dataframe = peek(pandas.DataFrame, ['data', 'index'])
+        pandas_storables += [Storable(pandas.Series, handlers=StorableHandler(poke=poke_series, peek=peek_series)),
+                Storable(pandas.DataFrame, handlers=StorableHandler(poke=poke_dataframe, peek=peek_dataframe))]
 
 
 
