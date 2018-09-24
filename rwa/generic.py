@@ -1,7 +1,7 @@
 
 import six
 from .storable import *
-from collections import deque, OrderedDict
+from collections import namedtuple, deque, OrderedDict
 import copy
 import warnings
 import traceback
@@ -16,6 +16,11 @@ except NameError: # Py3
 basetypes = (bool, int, float) + strtypes
 
 def isreference(a):
+        """
+        Tell whether a variable is an object reference.
+
+        Broken. Returns ``False``.
+        """
         check = ('__dict__', '__slots__')
         for attr in check:
                 try:
@@ -28,6 +33,9 @@ def isreference(a):
 
 
 def lookup_type(storable_type):
+        """
+        Look for the Python type that corresponds to a storable type name.
+        """
         if storable_type.startswith('Python'):
                 _, module_name = storable_type.split('.', 1)
         else:
@@ -47,11 +55,21 @@ def lookup_type(storable_type):
         return python_type
 
 
-def _add_to_stack(stack, element):
-        return stack if stack is None else stack + (element,)
-
-
 class GenericStore(StoreBase):
+        """
+        Abstract class for stores.
+
+        Implements the :meth:`poke` and :meth:`peek` methods with support for
+        duplicate references and call stack (error reporting).
+        Every other *poke*/*peek* functions should call these high-level methods to
+        (de-)serialize children attributes.
+
+        :meth:`poke` and :meth:`peek` delegate to specialized variants such as
+        :meth:`pokeNative` and :meth:`pokeStorable` (or their *peek* counterparts).
+        Children attribute names are also converted into record references in these
+        high-level methods.
+
+        """
         __slots__ = ('verbose', '_stack_active')
 
         def __init__(self, storables, verbose=False):
@@ -65,39 +83,167 @@ class GenericStore(StoreBase):
                 StoreBase.registerStorable(self, storable)
 
         def strRecord(self, record, container):
+                """
+                Convert a record reference from a container into a string.
+
+                The default implementation considers string record references that do not
+                require convertion.
+
+                See also :meth:`formatRecordName`.
+                """
                 return record
 
         def formatRecordName(self, objname):
-                """abstract method"""
+                """
+                Convert a record name into a record reference.
+
+                **abstract method**
+
+                The term *record reference* refers to the address of the record in the store
+                as it can be natively understood by the underlying store.
+
+                Arguments:
+
+                        objname (str): record/object name.
+
+                Returns:
+
+                        any: record reference for use in all *peek*/*poke* methods except
+                                the main :meth:`peek` and :meth:`poke` methods.
+
+                See also :meth:`strRecord`.
+                """
                 raise NotImplementedError('abstract method')
 
         def newContainer(self, objname, obj, container):
-                """abstract method"""
+                """
+                Make a new container.
+
+                **abstract method**
+
+                Arguments:
+
+                        objname (any): record reference.
+
+                        obj (any): object to be serialized into the record; useful only if
+                                the type of the record depends on the nature of the object.
+
+                        container (any): container.
+
+                Returns:
+
+                        any: reference (address in the store) of the new container.
+                """
                 raise NotImplementedError('abstract method')
 
         def getRecord(self, objname, container):
-                """abstract method"""
+                """
+                Record getter.
+
+                **abstract method**
+
+                Arguments:
+
+                        objname (any): record reference.
+
+                        container (any): parent container.
+
+                Returns:
+
+                        any: record or container.
+                """
                 raise NotImplementedError('abstract method')
 
         def getRecordAttr(self, attr, record):
-                """abstract method"""
+                """
+                Record attribute getter.
+
+                **abstract method**
+
+                Arguments:
+
+                        attr (str): attribute name.
+
+                        record (any): record.
+
+                Returns:
+
+                        str: attribute string value.
+                """
                 raise NotImplementedError('abstract method')
 
         def setRecordAttr(self, attr, val, record):
-                """abstract method"""
+                """
+                Record attribute setter.
+
+                **abstract method**
+
+                Arguments:
+
+                        attr (str): attribute name.
+
+                        val (str): attribute string value.
+
+                        record (any): record.
+
+                """
                 raise NotImplementedError('abstract method')
 
         def isStorable(self, record):
                 return self.getRecordAttr('type', record) is not None
 
         def isNativeType(self, obj):
+                """
+                Tell whether an object can be natively serialized.
+
+                If ``True``, :meth:`poke` delegates to :meth:`pokeNative`.
+                Otherwise, :meth:`poke` delegates to :meth:`tryPokeAny`.
+
+                The default implementation returns ``True``.
+                """
                 return True # per default, so that `tryPokeAny` is not called
 
         def pokeNative(self, objname, obj, container):
-                """abstract method"""
+                """
+                Let the underlying store serialize an object.
+
+                **abstract method**
+
+                Arguments:
+
+                        objname (any): record reference.
+
+                        obj (any): object to be serialized.
+
+                        container (any): container or record.
+
+                For stores with dict-like interface, :meth:`pokeNative` can be thought as:
+
+                .. code-block:: python
+
+                        container[objname] = obj
+
+                See also :meth:`peekNative`.
+                """
                 raise TypeError('record not supported')
 
         def pokeStorable(self, storable, objname, obj, container, visited=None, _stack=None):
+                """
+                Arguments:
+
+                        storable (StorableHandler): storable instance.
+
+                        objname (any): record reference.
+
+                        obj (any): object to be serialized.
+
+                        container (any): container.
+
+                        visited (dict): map of the previously serialized objects that are
+                                passed by references; keys are the objects' IDs.
+
+                        _stack (CallStack): stack of parent object names.
+                """
                 #print((objname, storable.storable_type)) # debug
                 storable.poke(self, objname, obj, container, visited=visited, _stack=_stack)
                 try:
@@ -114,6 +260,26 @@ class GenericStore(StoreBase):
                                 self.setRecordAttr('version', from_version(storable.version), record)
 
         def pokeVisited(self, objname, obj, record, existing, visited=None, _stack=None):
+                """
+                Serialize an already serialized object.
+
+                If the underlying store supports linking, this is the place where to make links.
+
+                The default implementation delegates to :meth:`pokeStorable` or :meth:`pokeNative`.
+
+                Arguments:
+
+                        objname (any): record reference.
+
+                        obj (any): object to be serialized.
+
+                        existing (any): absolute reference of the record which the object
+                                was already serialized into.
+
+                        visited (dict): already serialized objects.
+
+                        _stack (CallStack): stack of parent object names.
+                """
                 if self.hasPythonType(obj):
                         storable = self.byPythonType(obj).asVersion()
                         self.pokeStorable(storable, objname, obj, record, visited=visited, \
@@ -183,14 +349,43 @@ class GenericStore(StoreBase):
                                 raise
 
         def tryPokeAny(self, objname, obj, record, visited=None, _stack=None):
-                """abstract method"""
+                """
+                First try to poke with :meth:`pokeNative`.
+                If this fails, generate a default storable instance and try with
+                :meth:`pokeStorable` instead.
+
+                **abstract method**
+
+                See also :meth:`pokeStorable` for a description of the input arguments.
+
+                See also :meth:`isNativeType` for how to route an object through :meth:`tryPokeAny`.
+                """
                 raise NotImplementedError('abstract method')
 
         def peekNative(self, record):
-                """abstract method"""
+                """
+                Let the underlying store deserialize an object.
+
+                **abstract method**
+
+                See also :meth:`pokeNative`.
+                """
                 raise TypeError('record not supported')
 
         def peekStorable(self, storable, record, _stack=None):
+                """
+                Arguments:
+
+                        storable (StorableHandler): storable instance.
+
+                        record (any): record.
+
+                        _stack (CallStack): stack of parent object names.
+
+                Returns:
+
+                        any: deserialized object.
+                """
                 return storable.peek(self, record, _stack=_stack)
 
         def peek(self, objname, container, _stack=None):
@@ -223,6 +418,23 @@ class GenericStore(StoreBase):
                                 raise
 
         def defaultStorable(self, python_type=None, storable_type=None, version=None, **kwargs):
+                """
+                Generate a default storable instance.
+
+                Arguments:
+
+                        python_type (type): Python type of the object.
+
+                        storable_type (str): storable type name.
+
+                        version (tuple): version number of the storable handler.
+
+                Returns:
+
+                        StorableHandler: storable instance.
+
+                Extra keyword arguments are passed to :meth:`registerStorable`.
+                """
                 if python_type is None:
                         python_type = lookup_type(storable_type)
                 if self.verbose:
@@ -234,6 +446,17 @@ class GenericStore(StoreBase):
 
 # pokes
 def poke(exposes):
+        """
+        Default serializer factory.
+
+        Arguments:
+
+                exposes (iterable): attributes to serialized.
+
+        Returns:
+
+                callable: serializer (`poke` routine).
+        """
         def _poke(store, objname, obj, container, visited=None, _stack=None):
                 try:
                         sub_container = store.newContainer(objname, obj, container)
@@ -251,6 +474,9 @@ def poke(exposes):
         return _poke
 
 def poke_assoc(store, objname, assoc, container, visited=None, _stack=None):
+        """
+        Serialize association lists.
+        """
         try:
                 sub_container = store.newContainer(objname, assoc, container)
         except:
@@ -286,6 +512,22 @@ def poke_assoc(store, objname, assoc, container, visited=None, _stack=None):
 
 # peeks
 def default_peek(python_type, exposes):
+        """
+        Autoserializer factory.
+
+        Works best in Python 3.
+
+        Arguments:
+
+                python_type (type): type constructor.
+
+                exposes (iterable): sequence of attributes.
+
+        Returns:
+
+                callable: deserializer (`peek` routine).
+
+        """
         with_args = False
         make = python_type
         try:
@@ -336,11 +578,44 @@ def default_peek(python_type, exposes):
         return peek
 
 def unsafe_peek(init):
+        """
+        Deserialize all the attributes available in the container and pass them in the same order
+        as they come in the container.
+
+        This is a factory function; returns the actual `peek` routine.
+
+        Arguments:
+
+                init: type constructor.
+
+        Returns:
+
+                callable: deserializer (`peek` routine).
+
+        """
         def peek(store, container, _stack=None):
                 return init(*[ store.peek(attr, container, _stack=_stack) for attr in container ])
         return peek
 
 def peek_with_kwargs(init, args=[]):
+        """
+        Make datatypes passing keyworded arguments to the constructor.
+
+        This is a factory function; returns the actual `peek` routine.
+
+        Arguments:
+
+                init (callable): type constructor.
+
+                args (iterable): arguments NOT to be keyworded; order does matter.
+
+        Returns:
+
+                callable: deserializer (`peek` routine).
+
+        All the peeked attributes that are not referenced in `args` are passed to `init` as
+        keyworded arguments.
+        """
         def peek(store, container, _stack=None):
                 return init(\
                         *[ store.peek(attr, container, _stack=_stack) for attr in args ], \
@@ -349,6 +624,19 @@ def peek_with_kwargs(init, args=[]):
         return peek
 
 def peek(init, exposes, debug=False):
+        """
+        Default deserializer factory.
+
+        Arguments:
+
+                init (callable): type constructor.
+
+                exposes (iterable): attributes to be peeked and passed to `init`.
+
+        Returns:
+
+                callable: deserializer (`peek` routine).
+        """
         def _peek(store, container, _stack=None):
                 args = [ store.peek(objname, container, _stack=_stack) \
                         for objname in exposes ]
@@ -358,6 +646,9 @@ def peek(init, exposes, debug=False):
         return _peek
 
 def peek_assoc(store, container, _stack=None):
+        """
+        Deserialize association lists.
+        """
         assoc = []
         try:
                 if store.getRecordAttr('key', container) == 'escaped':
@@ -462,7 +753,7 @@ def default_storable(python_type, exposes=None, version=None, storable_type=None
 
                 python_type (type): type.
 
-                exposes (list): list of attributes exposed by the type.
+                exposes (iterable): attributes exposed by the type.
 
                 version (tuple): version number.
 
@@ -494,6 +785,9 @@ def default_storable(python_type, exposes=None, version=None, storable_type=None
 
 
 def kwarg_storable(python_type, exposes=None, version=None, storable_type=None, init=None, args=[]):
+        """
+        **Deprecated**
+        """
         warnings.warn('kwarg_storable', DeprecationWarning)
         if init is None:
                 init = python_type
@@ -576,6 +870,25 @@ def not_storable(_type):
         return Storable(_type, handlers=StorableHandler(poke=fake_poke, peek=fail_peek(_type)))
 
 
+# helpers for services and already registered storable instances
+def force_auto(service, _type):
+        """
+        Helper for forcing autoserialization of a datatype with already registered explicit
+        storable instance.
+
+        Arguments:
+
+                service (StorableService): active storable service.
+
+                _type (type): type to be autoserialized.
+
+        """
+        storable = service.byPythonType(_type, istype=True)
+        version = max(handler.version[0] for handler in storable.handlers) + 1
+        _storable = default_storable(_type, version=(version, ))
+        storable.handlers.append(_storable.handlers[0])
+
+
 class _Class(object):
         __slots__ = ('member_descriptor',)
         @property
@@ -585,7 +898,7 @@ class _Class(object):
                 pass
 
 function_storables = [ not_storable(_type) for _type in frozenset(( \
-                type, \
+                #type, \
                 type(len), \
                 type(lambda a: a), \
                 type(_Class.member_descriptor), \
@@ -597,11 +910,36 @@ function_storables = [ not_storable(_type) for _type in frozenset(( \
 
 
 def poke_native(getstate):
+        """
+        Serializer factory for types which state can be natively serialized.
+
+        Arguments:
+
+                getstate (callable): takes an object and returns the object's state
+                        to be passed to `pokeNative`.
+
+        Returns:
+
+                callable: serializer (`poke` routine).
+
+        """
         def poke(service, objname, obj, container, visited=None, _stack=None):
                 service.pokeNative(objname, getstate(obj), container)
         return poke
 
 def peek_native(make):
+        """
+        Deserializer factory for types which state can be natively serialized.
+
+        Arguments:
+
+                make (callable): type constructor.
+
+        Returns:
+
+                callable: deserializer (`peek` routine)
+
+        """
         def peek(service, container, _stack=None):
                 return make(service.peekNative(container))
         return peek
@@ -610,18 +948,6 @@ def peek_native(make):
 type_storable = Storable(type, handlers=StorableHandler(
                         peek=peek_native(lookup_type),
                         poke=poke_native(format_type)))
-
-def with_type_support(storables):
-        _storables = []
-        inserted = False
-        for _storable in storables:
-                if _storable.python_type is type:
-                        _storable = type_storable
-                        inserted = True
-                _storables.append(_storable)
-        if not inserted:
-                _storables.append(type_storable)
-        return _storables
 
 
 try:
@@ -636,6 +962,19 @@ else:
 
 
 def handler(init, exposes):
+        """
+        Simple handler with default `peek` and `poke` procedures.
+
+        Arguments:
+
+                init (callable): type constructor.
+
+                exposes (iterable): attributes to be (de-)serialized.
+
+        Returns:
+
+                StorableHandler: storable handler.
+        """
         return StorableHandler(poke=poke(exposes), peek=peek(init, exposes))
 
 
@@ -710,20 +1049,39 @@ try:
 except ImportError:
         spatial_storables = []
 else:
-        # scipy.sparse storable instances for Python2 (Python3 can autoserialize ConvexHull)
+        # scipy.sparse storable instances for Python2.
+        # Python3 can autoserialize ConvexHull and may actually do a better job
+        Delaunay_exposes = ['points', 'simplices', 'neighbors', 'equations', 'paraboloid_scale', 'transform', 'vertex_to_simplex', 'convex_hull', 'coplanar', 'vertex_neighbor_vertices']
         ConvexHull_exposes = ['points', 'vertices', 'simplices', 'neighbors', 'equations', 'coplanar', 'area', 'volume']
-        def mk_ConvexHull(points, vertices, simplices, neighbors, equations, coplanar, area, volume):
-                hull = scipy.spatial.qhull.ConvexHull(points)
-                try:
-                        ok = np.all(numpy.isclose(hull.vertices, vertices))
-                except:
-                        ok = False
-                if not ok:
-                        warn('object of type ConvexHull has changed', RuntimeWarning)
-                return hull
-        ConvexHull_handler = handler(mk_ConvexHull, ConvexHull_exposes)
 
-        spatial_storables = [Storable(scipy.spatial.qhull.ConvexHull, handlers=ConvexHull_handler)]
+        _scipy_spatial_types = [
+                ('Delaunay', Delaunay_exposes, ('vertices', )),
+                ('ConvexHull', ConvexHull_exposes, ('simplices', 'equations'))]
+
+        def scipy_spatial_storable(name, exposes, check):
+                _fallback = namedtuple(name, exposes)
+                _type = getattr(scipy.spatial.qhull, name)
+                def _init(*args):
+                        struct = _type(args[0])
+                        check_attrs = list(check) # copy
+                        ok = True
+                        while ok and check_attrs:
+                                attr = check_attrs.pop()
+                                i = exposes.index(attr)
+                                try:
+                                        ok = numpy.all(numpy.isclose(getattr(struct, attr), args[i]))
+                                except (SystemExit, KeyboardInterrupt):
+                                        raise
+                                except:
+                                        #raise # debug
+                                        ok = False
+                        if not ok:
+                                warn('object of type {} cannot be properly regenerated; using method-less fallback'.format(name), RuntimeWarning)
+                                struct = _fallback(*args)
+                        return struct
+                return Storable(_type, handlers=handler(_init, exposes))
+
+        spatial_storables = [ scipy_spatial_storable(*_specs) for _specs in _scipy_spatial_types ]
 
 
 try:
@@ -805,5 +1163,8 @@ else:
 
 
 def namedtuple_storable(namedtuple, *args, **kwargs):
+        """
+        Storable factory for named tuples.
+        """
         return default_storable(namedtuple, namedtuple._fields, *args, **kwargs)
 

@@ -255,7 +255,7 @@ class StoreBase(StorableService):
 
                         container (any): address of the object in the store.
 
-                        _stack (CallStack): stack of `peek` calls.
+                        _stack (CallStack): stack of parent object names.
 
                 Returns:
 
@@ -277,7 +277,7 @@ class StoreBase(StorableService):
 
                         visited (dict): already seriablized objects.
 
-                        _stack (CallStack): stack of `poke` calls.
+                        _stack (CallStack): stack of parent object names.
 
                 '''
                 raise NotImplementedError('abstract method')

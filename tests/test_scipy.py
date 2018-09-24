@@ -53,6 +53,7 @@ class TestSciPyTypes(object):
                 test_file = os.path.join(tmpdir.strpath, 'test.h5')
                 # test values
                 data = {'convexhull': spatial.qhull.ConvexHull(np.random.rand(5,2)),
+                        'convexhull_with_options': spatial.qhull.ConvexHull(np.random.rand(5,2), qhull_options='QbB'),
                        }
                 #
                 # write
@@ -67,7 +68,7 @@ class TestSciPyTypes(object):
                 try:
                         for t in store.store:
                                 val = store.peek(t)
-                                assert type(val) is type(data[t])
+                                #assert type(val) is type(data[t])
                                 assert np.all(np.isclose(val.vertices,  data[t].vertices))
                                 assert np.all(np.isclose(val.simplices, data[t].simplices))
                                 assert np.all(np.isclose(val.neighbors, data[t].neighbors))

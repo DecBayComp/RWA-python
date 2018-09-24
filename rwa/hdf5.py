@@ -225,7 +225,8 @@ if _seq_storables_v1:
 
 
 hdf5_storables = list(itertools.chain(\
-        with_type_support(function_storables), \
+        [type_storable], \
+        function_storables, \
         string_storables, \
         seq_storables_v2, \
         numpy_storables, \
