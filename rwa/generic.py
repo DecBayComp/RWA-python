@@ -17,6 +17,10 @@ except NameError: # Py3
         strtypes = (strtypes, bytes)
 basetypes = (bool, ) + numtypes + strtypes
 
+
+rwa_params = dict()
+
+
 def isreference(a):
         """
         Tell whether a variable is an object reference.
@@ -1115,13 +1119,47 @@ try:
 except ImportError:
         pandas_storables = []
 else:
+        rwa_params['pandas.index.force_unicode']   = False
+        rwa_params['pandas.columns.force_unicode'] = True
+
+        def unicode_index(peek, rwa_params=rwa_params):
+                """
+                Convert byte strings into unicode.
+
+                Driven by global parameter *pandas.index.force_unicode*.
+                """
+                if rwa_params.get('pandas.index.force_unicode', None):
+                        def wrapped_peek(*args, **kwargs):
+                                index = peek(*args, **kwargs)
+                                index = type(index)([ i.decode('utf-8') if isinstance(i, bytes) else i for i in index ])
+                                return index
+                        return wrapped_peek
+                else:
+                        return peek
+        def unicode_columns(peek, rwa_params=rwa_params):
+                """
+                Convert byte strings into unicode.
+
+                Driven by global parameter *pandas.columns.force_unicode*.
+                """
+                if rwa_params.get('pandas.columns.force_unicode', None):
+                        def wrapped_peek(*args, **kwargs):
+                                df = peek(*args, **kwargs)
+                                cols = df.columns
+                                cols = type(cols)([ c.decode('utf-8') if isinstance(c, bytes) else c for c in cols ])
+                                df.columns = cols
+                                return df
+                        return wrapped_peek
+                else:
+                        return peek
+
         def poke_index(service, name, obj, container, visited=None, _stack=None):
                 poke_seq(service, name, obj.tolist(), container, visited=visited, _stack=_stack)
         def peek_index(init=pandas.Index):
                 def pandas_index_peek(service, container, _stack=None):
                         return init(peek_list(service, container, _stack=_stack))
-                return pandas_index_peek
-        peek_multiindex = peek_with_kwargs(pandas.MultiIndex)
+                return unicode_index(pandas_index_peek)
+        peek_multiindex = unicode_index(peek_with_kwargs(pandas.MultiIndex))
         #poke_multiindex = poke(['levels', 'labels', 'names'])
         # convert all the pandas.core.base.FrozenList into tuples
         def poke_multiindex(service, ixname, ix, parent_container, visited=None, _stack=None):
@@ -1182,7 +1220,7 @@ else:
                 data = OrderedDict([ (colname, df[colname].values) for colname in df.columns ])
                 service.poke('data', data, container, visited=visited, _stack=_stack)
                 service.poke('index', df.index, container, visited=visited, _stack=_stack)
-        peek_dataframe = peek(pandas.DataFrame, ['data', 'index'])
+        peek_dataframe = unicode_columns(peek(pandas.DataFrame, ['data', 'index']))
         pandas_storables += [Storable(pandas.Series, handlers=StorableHandler(poke=poke_series, peek=peek_series)),
                 Storable(pandas.DataFrame, handlers=StorableHandler(poke=poke_dataframe, peek=peek_dataframe))]
 

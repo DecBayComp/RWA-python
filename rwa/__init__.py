@@ -4,7 +4,7 @@ from . import generic
 from . import lazy
 from . import sequence
 from .storable import Storable, StorableHandler
-from .generic import default_storable, namedtuple_storable, not_storable
+from .generic import rwa_params, default_storable, namedtuple_storable, not_storable
 from .lazy import islazy, lazytype, lazyvalue
 try:
         from . import hdf5
