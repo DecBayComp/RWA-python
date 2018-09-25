@@ -75,11 +75,23 @@ Explicitly supported datatypes
 * any datatype supported by `h5py <http://docs.h5py.org/en/stable/faq.html#what-datatypes-are-supported>`_
 * *type*
 * sequences and collections including *tuple*, *list*, *frozenset*, *set*, *dict*, *namedtuple*, *deque*, *OrderedDict*, *Counter*, *defaultdict* and *memoryview*
-* *scipy.sparse* datatypes including *bsr_matrix*, *coo_matrix*, *csc_matrix*, *csr_matrix*, *dia_matrix*, *dok_matrix* and *lil_matrix*
-* *scipy.spatial.ConvexHull*
 * some *pandas* datatypes including *Index*, *Int64Index*, *Float64Index*, *MultiIndex*, *Series*, *DataFrame* and *Panel* (*Panel* is supported only with package *tables* available)
+* in *scipy.sparse*, types *bsr_matrix*, *coo_matrix*, *csc_matrix*, *csr_matrix*, *dia_matrix*, *dok_matrix* and *lil_matrix*
 
-Other datatypes are ignored, including built-in and user defined functions, class methods, etc.
+*pandas* and *scipy* types with explicit serialization rules may be autoserialized otherwise in |py3| (not tested).
+They benefit such rules for backward compatibility.
+
+The following datatypes are implicitly supported with |py3| and are serialized in |py2| with explicit rules:
+
+* in *scipy.spatial*, types *Delaunay*, *ConvexHull* and *Voronoi*
+
+Other datatypes are safely ignored, including built-in and user defined functions, class methods, etc.
+
+
+Known issues
+------------
+
+A |py2|-serialized *scipy.spatial.Delaunay* can be deserialized in |py3| but not conversely.
 
 
 More about RWA-python

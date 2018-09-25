@@ -10,7 +10,7 @@ except ImportError:
             + '\nThis is likely an issue with the HDF5 library; please check it is properly installed.'
         raise ImportError(msg)
 
-from numpy import string_, ndarray#, MaskedArray
+import numpy
 import tempfile
 import itertools
 from .storable import *
@@ -24,7 +24,7 @@ from .sequence import *
 def to_binary(s):
         if isinstance(s, six.text_type):
                 s = s.encode('utf-8')
-        return string_(s)
+        return numpy.string_(s)
 
 if six.PY3:
         def from_unicode(s): return s
@@ -41,7 +41,7 @@ else:
         def from_bytes(b): return b
         to_str = str
 
-to_attr = string_
+to_attr = numpy.string_
 from_attr = from_bytes
 
 def native_poke(service, objname, obj, container, *args, **kargs):
@@ -176,7 +176,7 @@ string_storables = [\
                 handlers=StorableHandler(poke=string_poke, peek=binary_peek)), \
         Storable(six.text_type, key='Python.unicode', \
                 handlers=StorableHandler(poke=string_poke, peek=text_peek))]
-numpy_storables += [Storable(ndarray, handlers=StorableHandler(poke=native_poke, peek=native_peek))]
+numpy_storables += [Storable(numpy.ndarray, handlers=StorableHandler(poke=native_poke, peek=native_peek))]
 
 class SequenceV2(SequenceHandling):
         def suitable_record_name(self, name):
@@ -192,7 +192,8 @@ class SequenceV2(SequenceHandling):
         def iter_records(self, store, container):
                 return container.keys()
         def suitable_array_element(self, elem):
-                return True # let's delegate to `poke_array`
+                #return True # let's delegate to `poke_array`
+                return isinstance(elem, (bool, ) + numtypes + numpy_basic_types)
         def poke_array(self, store, name, elemtype, elements, container, visited, _stack):
                 native_poke(store, name, elements, container, visited, _stack)
                 return store.getRecord(name, container)

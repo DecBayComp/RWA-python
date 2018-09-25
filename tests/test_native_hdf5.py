@@ -16,8 +16,13 @@ class TestNativeTypes(object):
 
         def test_base_types(self, tmpdir):
                 # test types/values
-                value = {'bool': True, 'int': 2, 'float': .1, 'bytes': b'abc', 'unicode': u'abç'}
+                value = {'bool': True, 'int': 2, 'float': .1, 'complex': 2+3j,
+                        'bytes': b'abc', 'unicode': u'abç'}
                 value['str'] = value['bytes' if str is bytes else 'unicode']
+                try:
+                        value['long'] = long(9999999999999999)
+                except NameError: # Py3
+                        pass
                 #
                 k = str(bool).find('bool') # Py2 may yield 7 while Py3 may yield 8
                 test_file = os.path.join(tmpdir.strpath, 'test.h5')
@@ -29,6 +34,10 @@ class TestNativeTypes(object):
                                 store.poke(_type, value[_type])
                 finally:
                         store.close()
+                # `long` is converted into `int` by h5py and this is actually desirable
+                # for Py2-Py3 compatibility.
+                if 'long' in value:
+                        value['long'] = int(value['long'])
                 # read and check
                 store = HDF5Store(test_file, 'r')
                 try:

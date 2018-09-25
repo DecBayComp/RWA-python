@@ -8,12 +8,14 @@ import traceback
 import importlib
 
 
+numtypes = (int, float, complex)
 strtypes = str
 try: # Py2
         strtypes = (strtypes, unicode)
+        numtypes = (numtypes[0], long) + numtypes[1:]
 except NameError: # Py3
         strtypes = (strtypes, bytes)
-basetypes = (bool, int, float) + strtypes
+basetypes = (bool, ) + numtypes + strtypes
 
 def isreference(a):
         """
@@ -955,13 +957,21 @@ try:
 except ImportError:
         numpy_storables = []
 else:
+        numpy_basic_types = (
+                numpy.bool_, numpy.int_, numpy.intc, numpy.intp,
+                numpy.int8, numpy.int16, numpy.int32, numpy.int64,
+                numpy.uint8, numpy.uint16, numpy.uint32, numpy.uint64,
+                numpy.float_, numpy.float16, numpy.float32, numpy.float64,
+                numpy.complex_, numpy.complex64, numpy.complex128,
+                )
+
         # numpy.dtype
         numpy_storables = [\
                 Storable(numpy.dtype, handlers=StorableHandler(poke=poke_native(lambda t: t.str), \
                         peek=peek_native(numpy.dtype)))]
 
 
-def handler(init, exposes):
+def handler(init, exposes, version=None):
         """
         Simple handler with default `peek` and `poke` procedures.
 
@@ -971,11 +981,13 @@ def handler(init, exposes):
 
                 exposes (iterable): attributes to be (de-)serialized.
 
+                version (tuple): version number.
+
         Returns:
 
                 StorableHandler: storable handler.
         """
-        return StorableHandler(poke=poke(exposes), peek=peek(init, exposes))
+        return StorableHandler(poke=poke(exposes), peek=peek(init, exposes), version=version)
 
 
 try:
@@ -1044,19 +1056,22 @@ else:
                 Storable(lil_matrix, handlers=lil_handler)]
 
 
+spatial_storables = []
 try:
         import scipy.spatial
 except ImportError:
-        spatial_storables = []
+        pass
 else:
         # scipy.sparse storable instances for Python2.
         # Python3 can autoserialize ConvexHull and may actually do a better job
-        Delaunay_exposes = ['points', 'simplices', 'neighbors', 'equations', 'paraboloid_scale', 'transform', 'vertex_to_simplex', 'convex_hull', 'coplanar', 'vertex_neighbor_vertices']
+        Delaunay_exposes = ['points', 'simplices', 'neighbors', 'equations', 'paraboloid_scale', 'paraboloid_shift', 'transform', 'vertex_to_simplex', 'convex_hull', 'coplanar', 'vertex_neighbor_vertices']
         ConvexHull_exposes = ['points', 'vertices', 'simplices', 'neighbors', 'equations', 'coplanar', 'area', 'volume']
+        Voronoi_exposes = ['points', 'vertices', 'ridge_points', 'ridge_vertices', 'regions', 'point_region']
 
         _scipy_spatial_types = [
-                ('Delaunay', Delaunay_exposes, ('vertices', )),
-                ('ConvexHull', ConvexHull_exposes, ('simplices', 'equations'))]
+                ('Delaunay', Delaunay_exposes, ('simplices', )),
+                ('ConvexHull', ConvexHull_exposes, ('vertices', 'equations')),
+                ('Voronoi', Voronoi_exposes, ('regions', 'point_region'))]
 
         def scipy_spatial_storable(name, exposes, check):
                 _fallback = namedtuple(name, exposes)
@@ -1069,7 +1084,11 @@ else:
                                 attr = check_attrs.pop()
                                 i = exposes.index(attr)
                                 try:
-                                        ok = numpy.all(numpy.isclose(getattr(struct, attr), args[i]))
+                                        arg = getattr(struct, attr)
+                                        if isinstance(args[i], list):
+                                                ok = arg == args[i]
+                                        else:
+                                                ok = numpy.all(numpy.isclose(arg, args[i]))
                                 except (SystemExit, KeyboardInterrupt):
                                         raise
                                 except:
@@ -1079,9 +1098,16 @@ else:
                                 warn('object of type {} cannot be properly regenerated; using method-less fallback'.format(name), RuntimeWarning)
                                 struct = _fallback(*args)
                         return struct
-                return Storable(_type, handlers=handler(_init, exposes))
+                handlers = [handler(_init, exposes, version=(0,))] # Py2
+                if six.PY3:
+                        auto = default_storable(_type)
+                        assert not auto.handlers[1:]
+                        assert handlers[0].version[0] < auto.handlers[0].version[0]
+                        handlers.append(auto.handlers[0])
+                return Storable(_type, handlers=handlers)
 
-        spatial_storables = [ scipy_spatial_storable(*_specs) for _specs in _scipy_spatial_types ]
+        spatial_storables += \
+                [ scipy_spatial_storable(*_specs) for _specs in _scipy_spatial_types ]
 
 
 try:
@@ -1137,7 +1163,7 @@ else:
 
         # `values` is not necessarily the underlying data; may be a coerced representation instead
         poke_series = poke(['data', 'index'])
-        peek_series = peek(pandas.Series, ['data', 'index'], debug=True)
+        peek_series = peek(pandas.Series, ['data', 'index'], debug=False)
         if six.PY2:
                 def poke_series(service, sname, s, parent_container, visited=None, _stack=None):
                         try:
