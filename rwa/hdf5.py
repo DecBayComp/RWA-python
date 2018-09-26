@@ -148,7 +148,6 @@ else:
                 import tables
                 import tables.hdf5extension
                 import tables.utilsextension
-                import fakemodule
         except ImportError as e:
                 import warnings
                 warnings.warn(e.args[0], ImportWarning)
