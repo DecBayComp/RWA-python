@@ -642,6 +642,9 @@ def peek_with_kwargs(init, args=[]):
                 for attr in container if attr not in args ]))
     return peek
 
+peek_as_dict = peek_with_kwargs(dict)
+
+
 def peek(init, exposes, debug=False):
     """
     Default deserializer factory.
@@ -1136,52 +1139,101 @@ try:
 except ImportError:
     pandas_storables = []
 else:
-    rwa_params['pandas.index.force_unicode']   = False
+    rwa_params['pandas.index.force_unicode']   = True
     rwa_params['pandas.columns.force_unicode'] = True
 
-    def unicode_index(peek, rwa_params=rwa_params):
-        """
-        Convert byte strings into unicode.
+    _unicode = lambda _s: _s.decode('utf-8') if isinstance(_s, bytes) else _s
+    def _map(f, seq):
+        return type(seq)([ f(a) for a in seq ])
+    def _fmap(f):
+        return lambda seq: _map(f, seq)
+    def _map2(f, seq):
+        return _map(_fmap(f), seq)
 
-        Driven by global parameter *pandas.index.force_unicode*.
-        """
-        if rwa_params.get('pandas.index.force_unicode', None):
-            def wrapped_peek(*args, **kwargs):
-                index = peek(*args, **kwargs)
-                index = type(index)([ i.decode('utf-8') if isinstance(i, bytes) else i for i in index ])
-                return index
-            return wrapped_peek
-        else:
-            return peek
-    def unicode_columns(peek, rwa_params=rwa_params):
-        """
-        Convert byte strings into unicode.
+    def unicode_index(peek, attrs=None, params=rwa_params):
+        """Helper for converting the `name` attribute (and others) of indices into unicode."""
+        attrs = set(attrs) if attrs else set()
+        attrs.add('name')
+        def _peek_index(*args, **kwargs):
+            index = peek(*args, **kwargs)
+            if params.get('pandas.index.force_unicode', None):
+                for attr in attrs:
+                    s = getattr(index, attr)
+                    if isinstance(s, strtypes):
+                        setattr(index, attr, _unicode(s))
+                    elif s is not None:
+                        setattr(index, attr, _map(_unicode, s))
+            return index
+        return _peek_index
 
-        Driven by global parameter *pandas.columns.force_unicode*.
-        """
-        if rwa_params.get('pandas.columns.force_unicode', None):
-            def wrapped_peek(*args, **kwargs):
-                df = peek(*args, **kwargs)
-                cols = df.columns
-                cols = type(cols)([ c.decode('utf-8') if isinstance(c, bytes) else c for c in cols ])
-                df.columns = cols
-                return df
-            return wrapped_peek
-        else:
-            return peek
-
-    poke_index = poke(['data'])
+    poke_index = poke(['data', 'name'])
     def poke_index(service, ixname, ix, parent_container, visited=None, _stack=None):
         container = service.newContainer(ixname, ix, parent_container)
         service.poke('data', ix.tolist(), container, visited=visited, _stack=_stack)
-    def peek_index(init=pandas.Index):
-        def pandas_index_peek(service, container, _stack=None):
-            return init(service.peek('data', container, _stack=_stack))
-        return unicode_index(pandas_index_peek)
-    peek_multiindex = unicode_index(peek_with_kwargs(pandas.MultiIndex))
+        service.poke('name', ix.name, container, visited=visited, _stack=_stack)
+
+    def peek_index(init=pandas.Index, params=rwa_params):
+        def _peek_index(service, *args, **kwargs):
+            data = service.peek('data', *args, **kwargs)
+            try:
+                name = service.peek('name', *args, **kwargs)
+            except (SystemExit, KeyboardInterrupt):
+                raise
+            except:
+                name = None
+            if params.get('pandas.index.force_unicode', None):
+                data = _map(_unicode, data)
+                if name is not None:
+                    if isinstance(name, strtypes):
+                        name = _unicode(name)
+                    else:
+                        # is this possible?
+                        name = _map(_unicode, name)
+            return init(data, name=name)
+        return _peek_index
+    def peek_numerical_index(init=pandas.Index, func=None):
+        """
+        Peek factory for Pandas numerical indices.
+        """
+        if func is None:
+            _peek_index = peek_with_kwargs(init, ['data'])
+        else:
+            def _peek_index(service, *args, **kwargs):
+                data = func(service.peek('data', *args, **kwargs))
+                try:
+                    name = service.peek('name', *args, **kwargs)
+                except (SystemExit, KeyboardInterrupt):
+                    raise
+                except:
+                    name = None
+                return init(data, name=name)
+        return unicode_index(_peek_index)
+
+    def peek_multiindex(*args, **kwargs):
+        attrs = peek_as_dict(*args, **kwargs)
+        if rwa_params.get('pandas.index.force_unicode', None):
+            try:
+                labels = attrs['labels']
+            except KeyError:
+                pass
+            else:
+                #attrs['labels'] = \
+                #    [ [ _unicode(_label) for _label in _labels ] for _labels in labels ]
+                attrs['labels'] = _map2(_unicode, labels)
+            try:
+                names = attrs['names']
+            except KeyError:
+                pass
+            else:
+                #attrs['names'] = [ _unicode(_name) for _name in names ]
+                attrs['names'] = _map(_unicode, names)
+        return pandas.MultiIndex(**attrs)
+
     #poke_multiindex = poke(['levels', 'labels', 'names'])
-    # convert all the pandas.core.base.FrozenList into tuples
     def poke_multiindex(service, ixname, ix, parent_container, visited=None, _stack=None):
+        """Poke procedure for pandas.MultiIndex.
+
+        Converts all the pandas.core.base.FrozenList into tuples."""
         container = service.newContainer(ixname, ix, parent_container)
         for attrname in ('levels', 'labels'):
             attr = tuple( tuple(item) for item in getattr(ix, attrname) )
@@ -1190,40 +1242,101 @@ else:
         attr = tuple( getattr(ix, attrname) )
         service.poke(attrname, attr, container, visited=visited, _stack=_stack)
 
-    # as such in latest pandas versions; force it in old (Python2?) pandas versions to be the same
+    try:
+        # UInt64Index is missing in 0.17.1
+        pandas_UInt64Index = pandas.UInt64Index
+        peek_uint64index = peek_numerical_index(pandas.UInt64Index)
+    except AttributeError:
+        # convert UInt64 into Int64
+        class pandas_UInt64Index(object):
+            """
+            Placeholder type.
+            """
+            __slot__ = ()
+            pass
+        peek_uint64index = peek_numerical_index(pandas.Int64Index, lambda a: a.astype(np.int64))
+
+    poke_rangeindex = poke(['_start', '_stop', '_step', 'name'])
+    try:
+        # RangeIndex is missing in 0.17.1
+        pandas_RangeIndex = pandas.RangeIndex
+        peek_rangeindex = peek_with_kwargs(pandas.RangeIndex, ['_start', '_stop', '_step'])
+    except AttributeError:
+        # convert to Int64Index
+        class pandas_RangeIndex(object):
+            """
+            Placeholder type.
+            """
+            __slot__ = ()
+            pass
+        def peek_rangeindex(*args, **kwargs):
+            attrs = peek_as_dict(*args, **kwargs)
+            return pandas.Int64Index( \
+                range( \
+                    start=attrs.pop('_start', None), \
+                    stop=attrs.pop('_stop', None), \
+                    step=attrs.pop('_step', None)), \
+                **attrs)
+
+    # some Pandas types have moved several times; force the key
     pandas_storables = [ \
         Storable(pandas.Index, \
          key='Python.pandas.core.index.Index', \
          handlers=StorableHandler(poke=poke_index, peek=peek_index())), \
         Storable(pandas.Int64Index, \
          key='Python.pandas.core.index.Int64Index', \
-         handlers=StorableHandler(poke=poke_index, peek=peek_index(pandas.Int64Index)))]
-
-    try:
-        # UInt64Index is mentioned in the documentation but is missing here
-        pandas_storables.append( \
-            Storable(pandas.UInt64Index, \
-             key='Python.pandas.core.index.UInt64Index', \
-             handlers=StorableHandler(poke=poke_index, peek=peek_index(pandas.UInt64Index))))
-    except AttributeError:
-        pass
-
-    pandas_storables += [ \
+         handlers=StorableHandler(poke=poke_index, \
+            peek=peek_numerical_index(pandas.Int64Index))), \
+        Storable(pandas_UInt64Index, \
+         key='Python.pandas.core.index.UInt64Index', \
+         handlers=StorableHandler(poke=poke_index, peek=peek_uint64index)), \
         Storable(pandas.Float64Index, \
          key='Python.pandas.core.index.Float64Index', \
-         handlers=StorableHandler(poke=poke_index, peek=peek_index(pandas.Float64Index))), \
+         handlers=StorableHandler(poke=poke_index, \
+            peek=peek_numerical_index(pandas.Float64Index))), \
+        Storable(pandas_RangeIndex, \
+         key='Python.pandas.core.index.RangeIndex', \
+         handlers=StorableHandler(poke=poke_rangeindex, peek=unicode_index(peek_rangeindex))), \
         Storable(pandas.MultiIndex, \
          key='Python.pandas.core.index.MultiIndex', \
          handlers=StorableHandler(poke=poke_multiindex, peek=peek_multiindex))]
 
+    class DebugWarning(RuntimeWarning):
+        pass
+
+    try:
+        # Categorical and CategoricalIndex might not be available in the 0.17.1 version
+
+        # not implemented yet
+        def _peek_categorical(*args, **kwargs):
+            attrs = peek_as_dict(*args, **kwargs)
+            codes = attrs.pop('codes') # `codes` is required
+            categories = attrs.pop('categories') # `categories` is required
+            return pandas.Categorical.from_codes(codes, categories)
+        peek_categoricalindex = unicode_index( \
+            peek_with_kwargs(pandas.CategoricalIndex, ['codes']), \
+            ['categories'])
+
+        #pandas_storables += [ \
+        [ \
+            Storable(pandas.CategoricalIndex, \
+             key='Python.pandas.core.index.CategoricalIndex', \
+             handlers=StorableHandler(poke=poke(['codes','categories','name']), \
+                peek=peek_categoricalindex))]
+
+    except AttributeError:
+        pass
+
     # `values` is not necessarily the underlying data; may be a coerced representation instead
     poke_series = poke(['data', 'index'])
     peek_series = peek(pandas.Series, ['data', 'index'])
-    if six.PY2:
+    if True:#six.PY2:
+        # `data` is deprecated
         def poke_series(service, sname, s, parent_container, visited=None, _stack=None):
             container = service.newContainer(sname, s, parent_container)
             service.poke('data', s.values, container, visited=visited, _stack=_stack)
             service.poke('index', s.index, container, visited=visited, _stack=_stack)
+
     # `poke_dataframe` is similar to `poke` but converts part of the dataframe into
     # an ordered dictionnary of columns
     def poke_dataframe(service, dfname, df, parent_container, visited=None, _stack=None):
@@ -1231,10 +1344,20 @@ else:
         data = OrderedDict([ (colname, df[colname].values) for colname in df.columns ])
         service.poke('data', data, container, visited=visited, _stack=_stack)
         service.poke('index', df.index, container, visited=visited, _stack=_stack)
-    peek_dataframe = unicode_columns(peek(pandas.DataFrame, ['data', 'index']))
+
+    def peek_dataframe(params=rwa_params):
+        """Closure for `_peek_dataframe` with `params` and `__peek_dataframe`."""
+        __peek_dataframe = peek(pandas.DataFrame, ['data', 'index'])
+        def _peek_dataframe(*args, **kwargs):
+            df = __peek_dataframe(*args, **kwargs)
+            if params.get('pandas.columns.force_unicode', None):
+                df.columns = _map(_unicode, df.columns)
+            return df
+        return _peek_dataframe
+
     pandas_storables += [ \
         Storable(pandas.Series, handlers=StorableHandler(poke=poke_series, peek=peek_series)),
-        Storable(pandas.DataFrame, handlers=StorableHandler(poke=poke_dataframe, peek=peek_dataframe))]
+        Storable(pandas.DataFrame, handlers=StorableHandler(poke=poke_dataframe, peek=peek_dataframe()))]
 
 
 
