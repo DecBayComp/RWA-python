@@ -9,7 +9,8 @@ from rwa.hdf5 import HDF5Store
 
 import os.path
 import numpy as np
-from pandas import Index, Int64Index, Float64Index, MultiIndex, Series, DataFrame
+from pandas import Index, Int64Index, Float64Index, MultiIndex, Series, DataFrame, \
+        Categorical, CategoricalIndex
 try:
     from pandas import UInt64Index
 except ImportError:
@@ -23,11 +24,11 @@ except ImportError:
 else:
     _test_rangeindex = True
 try:
-    from pandas import CategoricalIndex
-except ImportError:
-    _test_categoricalindex = False
+    from pandas.api.types import CategoricalDtype
+except (AttributeError, ImportError):
+    _test_categoricaldtype = False
 else:
-    _test_categoricalindex = True
+    _test_categoricaldtype = True
 
 
 def as_unicode(s):
@@ -98,17 +99,17 @@ class TestPandasTypes(object):
         finally:
             store.close()
 
-    def test_categoricalindex(self, tmpdir):
-        if not _test_categoricalindex:
-            assert False # pandas.CategoricalIndex not available
-            return
-        assert False # not implemented yet
+    def test_categorical(self, tmpdir):
         test_file = os.path.join(tmpdir.strpath, 'test.h5')
         # test value
         data = {'categoricalindex0': CategoricalIndex(list('aabacbba'), ordered=True),
             'categoricalindex1': CategoricalIndex([2, 1, 1, 3, 2, 3, 1],
                 categories=[1, 0, 2, 3], name=b'ci1')}
-        #
+        data = {'categorical': Categorical(['a','b','c','a','b','c'], ordered=True,
+                categories=['c', 'b', 'a'])}
+        if _test_categoricaldtype:
+            data['series_with_categories'] = Series(['a', 'b', 'a', 'c'], dtype=\
+                CategoricalDtype(categories=['b', 'a'], ordered=True))
         # write
         store = HDF5Store(test_file, 'w')
         try:
@@ -126,7 +127,8 @@ class TestPandasTypes(object):
                 assert np.all(val.codes == data[t].codes)
                 assert val.categories.tolist() == as_unicode(data[t].categories.tolist())
                 assert val.ordered == data[t].ordered
-                assert val.name == as_unicode(data[t].name)
+                if hasattr(data[t], 'name'):
+                    assert val.name == as_unicode(data[t].name)
         finally:
             store.close()
 

@@ -86,14 +86,15 @@ class LazyStore(GenericStore):
 
 
 class LazyPeek(object):
-    __slots__ = ('storable', 'store', 'locator', '_value', '_deep', '_stack')
+    __slots__ = ('storable', 'store', 'locator', '_value', '_deep', '_stack', 'kwargs')
 
-    def __init__(self, store, storable, container, _stack=None):
+    def __init__(self, store, storable, container, _stack=None, **kwargs):
         self.storable = storable
         self.store = store
         self.locator = store.locator(container)
         self._value = self._deep = None
         self._stack = copy.copy(_stack)
+        self.kwargs = kwargs
 
     def peek(self, deep=False, block=True):
         if self._value is None or (deep and not self._deep):
@@ -102,11 +103,13 @@ class LazyPeek(object):
             try:
                 previous, self.store.lazy = self.store.lazy, not deep
                 try:
+                    assert not self.kwargs
                     self._value = GenericStore.peekStorable(
                         self.store,
                         self.storable,
                         self.store.container(self.locator),
-                        _stack=self._stack)
+                        _stack=self._stack,
+                        **self.kwargs)
                     self._deep = deep
                 except (SystemExit, KeyboardInterrupt):
                     raise
@@ -216,7 +219,7 @@ class FileStore(LazyStore):
         self.temporary = None
         self.sane = True
         file_exists = os.path.isfile(resource)
-        if self.writes(mode):# and file_exists:
+        if self.writes(mode):
             dirname, basename = os.path.split(resource)
             if basename[0] != '.':
                 basename = '.' + basename
@@ -232,7 +235,7 @@ class FileStore(LazyStore):
                 print('flushing into temporary file: {}'.format(temporary))
             self.temporary = temporary
             self.open_args = (temporary, )
-        elif self.writes(mode) or file_exists:
+        elif file_exists:
             self.open_args = (resource, )
         else:
             # reading a missing file
@@ -300,12 +303,12 @@ _overwrites = {
     collections.deque:      list,
     collections.OrderedDict:    None,
     }
-try:
-    import pandas
-except ImportError:
-    pass
-else:
-    _overwrites[pandas.Index] = list
+#try:
+#    import pandas
+#except ImportError:
+#    pass
+#else:
+#    _overwrites[pandas.Index] = list
 
 def _wrap(f):
     return lambda s, c, *args, **kwargs: f(peek_assoc(s, c, *args, **kwargs))
@@ -336,5 +339,5 @@ for _storable in generic.seq_storables:
         warnings.warn('unsupported sequence storable: {}'.format(_storable.python_type),
             DeprecationWarning) # raw.lazy may be outdated
         continue
-    _storable.handlers[0].peek = _new_peek
+    _storable.handlers[0]._peek = _new_peek
 

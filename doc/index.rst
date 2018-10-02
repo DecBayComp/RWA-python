@@ -75,11 +75,8 @@ Explicitly supported datatypes
 * any datatype supported by `h5py <http://docs.h5py.org/en/stable/faq.html#what-datatypes-are-supported>`_
 * *type*
 * sequences and collections including *tuple*, *list*, *frozenset*, *set*, *dict*, *namedtuple*, *deque*, *OrderedDict*, *Counter*, *defaultdict* and *memoryview*
-* some *pandas* datatypes including *Index*, *Int64Index*, *Float64Index*, *MultiIndex*, *Series*, *DataFrame* and *Panel* (*Panel* is supported only with package *tables* available)
+* some *pandas* datatypes including *Index*, *Int64Index*, *UInt64Index*, *Float64Index*, *RangeIndex*, *MultiIndex*, *Categorical*, *Series*, *DataFrame* and *Panel* (*Panel* is supported only with package *tables* available)
 * in *scipy.sparse*, types *bsr_matrix*, *coo_matrix*, *csc_matrix*, *csr_matrix*, *dia_matrix*, *dok_matrix* and *lil_matrix*
-
-*pandas* and *scipy* types with explicit serialization rules may be autoserialized otherwise in |py3| (not tested).
-They benefit such rules for backward compatibility.
 
 The following datatypes are implicitly supported with |py3| and are serialized in |py2| with explicit rules:
 
@@ -88,10 +85,27 @@ The following datatypes are implicitly supported with |py3| and are serialized i
 Other datatypes are safely ignored, including built-in and user defined functions, class methods, etc.
 
 
+Global parameters
+-----------------
+
+Release *0.8* features global parameters that can be accessed with
+:attr:`rwa.hdf5.hdf5_service.params` or simpler `rwa_params`.
+
+Currently available parameters are all Pandas-related.
+
+Since *tables* became an optional dependency, |rwa-python| features native serialization rules.
+This can be disabled with ``rwa_params['pandas.use_tables'] = True``.
+
+Other parameters are '*pandas.index.force_unicode*' and '*pandas.columns.force_unicode*', true
+per default to emulate the behaviour of *tables*.
+
+
 Known issues
 ------------
 
-A |py2|-serialized *scipy.spatial.Delaunay* can be deserialized in |py3| but not conversely.
+|py2|-serialized *scipy.spatial.Delaunay* can be deserialized in |py3| but not conversely.
+
+*pandas.CategoricalIndex* support is broken.
 
 
 More about RWA-python

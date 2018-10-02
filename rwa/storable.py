@@ -1,11 +1,10 @@
 
-from copy import deepcopy
-import six
 from warnings import warn
 
 class ConflictingVersionWarning(Warning):
     pass
 
+_undefined_parent_error = RuntimeError('corrupted handlers in Storable')
 
 class StorableHandler(object):
     '''Defines how to store an object of the class identified by `_parent`.
@@ -16,35 +15,111 @@ class StorableHandler(object):
 
         exposes (iterable): list of attributes to get/set.
 
-        peek (callable): read object from store.
+        _peek (callable): read object from store.
+            To be called through :meth:`peek`.
 
-        poke (callable): write object in store.
+        _poke (callable): write object in store.
+            To be called through :meth:`poke`.
 
         _parent (Storable): storable instance this handler is associated to.
 
+        _peek_option (set): keys of service-wide parameters to be passed to :attr:`_peek`.
+            To be accessed through property :attr:`peek_option`.
+
+        _poke_option (set): keys of service-wide parameters to be passed to :attr:`_poke`.
+            To be accessed through property :attr:`poke_option`.
+
+    :attr:`peek_option` and :attr:`poke_option` are keys in the service's :attr:`params` parameters
+    which values are passed by :meth:`peek` and :meth:`poke` to :attr:`_peek` and :attr:`_poke`
+    respectively, as keyword arguments if not already defined.
+
+    A parameter key is supposed to be a dot-separated sequence of keywords,
+    e.g. ``'my_module.my_option'``.
+    The keyword passed to :func:`peek` or :func:`poke` will be the substring after the last dot.
+    If :attr:`peek_option` is ``['my_module.my_option']``,
+    then :func:`peek` will receive the ``my_option=params['my_module.my_option']`` argument
+    (where *params* is the service-wide :attr:`~StorableService.params` parameters)
+    if *my_option* is not already passed from the caller's context
+    and '*my_module.my_option*' is defined in *params*.
     '''
-    __slots__ = ('version', 'exposes', 'poke', 'peek', '_parent')
+    __slots__ = ('version', 'exposes', '_poke', '_peek', '_parent', \
+            '_peek_option', '_poke_option')
+
+    @property
+    def peek_option(self):
+        return self._peek_option
+    @peek_option.setter
+    def peek_option(self, keys):
+        if keys is None:
+            self._peek_option = set()
+        elif isinstance(keys, (tuple, list, frozenset, set)):
+            self._peek_option = set(keys)
+        else:
+            self._peek_option = set([keys])
+
+    @property
+    def poke_option(self):
+        return self._poke_option
+    @poke_option.setter
+    def poke_option(self, keys):
+        if keys is None:
+            self._poke_option = set()
+        elif isinstance(keys, (tuple, list, frozenset, set)):
+            self._poke_option = set(keys)
+        else:
+            self._poke_option = set([keys])
 
     @property
     def python_type(self):
         if self._parent is None:
-            raise RuntimeError('corrupted handlers in Storable')
+            raise _undefined_parent_error
         else:   return self._parent.python_type
 
     @property
     def storable_type(self):
         if self._parent is None:
-            raise RuntimeError('corrupted handlers in Storable')
+            raise _undefined_parent_error
         else:   return self._parent.storable_type
 
-    def __init__(self, version=None, exposes={}, peek=None, poke=None):
+    def __init__(self, version=None, exposes={}, peek=None, poke=None, peek_option=None, \
+            poke_option=None):
         if version is None:
             version=(1,)
         self.version = version
         self.exposes = exposes
         self._parent = None
-        self.peek = peek
-        self.poke = poke
+        self._peek = peek
+        self._poke = poke
+        self.peek_option = peek_option
+        self.poke_option = poke_option
+
+    def peek(self, *args, **kwargs):
+        for option in self.peek_option:
+            try:
+                prm = self._parent.params[option]
+            except KeyError:
+                pass
+            except AttributeError:
+                raise _undefined_parent_error
+            else:
+                option = option.split('.')[-1]
+                if option not in kwargs:
+                    kwargs[option] = prm
+        return self._peek(*args, **kwargs)
+
+    def poke(self, *args, **kwargs):
+        for option in self.poke_option:
+            try:
+                prm = self._parent.params[option]
+            except KeyError:
+                pass
+            except AttributeError:
+                raise _undefined_parent_error
+            else:
+                option = option.split('.')[-1]
+                if option not in kwargs:
+                    kwargs[option] = prm
+        self._poke(*args, **kwargs)
 
 
 
@@ -59,8 +134,18 @@ class Storable(object):
 
         _handlers (list): list of handlers.
 
+        _parent (StorableService): service which the storable instance is registered in.
+
+    Note that different copies of a storable instance should be registered into distinct
+    services.
     '''
-    __slots__ = ('python_type', 'storable_type', '_handlers')
+    __slots__ = ('python_type', 'storable_type', '_handlers', '_parent')
+
+    def __init__(self, python_type, key=None, handlers=[]):
+        self.python_type = python_type
+        self.storable_type = key
+        self._handlers = [] # PY2?
+        self.handlers = handlers
 
     @property
     def handlers(self):
@@ -68,31 +153,32 @@ class Storable(object):
 
     @handlers.setter
     def handlers(self, handlers): # in PY2, setters work only in new style classes
-        #if not isinstance(handlers, list):
-        #       handlers = [handlers]
+        if isinstance(handlers, StorableHandler):
+               handlers = [handlers]
+        self._handlers = []
         for h in handlers:
+            h = copy_handler(h)
             h._parent = self
-        self._handlers = handlers
+            self._handlers.append(h)
 
-    def __init__(self, python_type, key=None, handlers=[]):
-        self.python_type = python_type
-        self.storable_type = key
-        self._handlers = [] # PY2?
-        if not isinstance(handlers, list):
-            handlers = [handlers]
-        self.handlers = handlers
+    @property
+    def params(self):
+        return self._parent.params
 
     def hasVersion(self, version):
         return version in [ h.version for h in self.handlers ]
 
     def asVersion(self, version=None):
+        if version is None:
+            version = self.default_version
+        else:
+            version = to_version(version)
         handler = None
         if version is None:
             for h in self.handlers:
                 if handler is None or handler.version < h.version:
                     handler = h
         else:
-            version = to_version(version)
             for h in self.handlers:
                 if h.version == version:
                     handler = h
@@ -100,6 +186,25 @@ class Storable(object):
             if handler is None:
                 raise KeyError('no such version number: {}'.format(version))
         return handler
+
+    @property
+    def default_version(self):
+        '''
+        Default version (tuple) or ``None``. Read-only property to be overloaded.
+
+        Example implementation:
+
+        .. code-block:: python
+
+            class MyStorableHandler(StorableHandler):
+                @property
+                def default_version(self):
+                    if self.params.get('my_module.my_boolean_option', None):
+                        return (2,) # default version is number 2
+                    #else: return None
+
+        '''
+        return
 
     def poke(self, *args, **kwargs):
         self.asVersion(kwargs.pop('version', None)).poke(*args, **kwargs)
@@ -129,14 +234,19 @@ class StorableService(object):
 
         by_python_type (dict): dictionnary of storable instances with types as keys.
 
-        by_storable_type (dict): dictionnary of storable instances with identification strings as keys.
+        by_storable_type (dict): dictionnary of storable instances with identification
+            strings as keys.
+
+        params (dict): mutable map of global parameters shared with all the registered
+            storable instances.
 
     '''
-    __slots__ = ('by_python_type', 'by_storable_type') # what about native_type?
+    __slots__ = ('by_python_type', 'by_storable_type', 'params') # what about native_type?
 
-    def __init__(self):
+    def __init__(self, params={}):
         self.by_python_type = {}
         self.by_storable_type = {}
+        self.params = params
 
     def registerStorable(self, storable, replace=False, agnostic=False):
         # check for compliance and fill in missing fields if possible
@@ -155,11 +265,12 @@ class StorableService(object):
         else:
             if pokes and self.hasPythonType(storable.python_type, True):
                 raise TypeError('conflicting instances', storable.python_type)
-            existing = deepcopy(storable)
+            existing = copy_storable(storable)
+            existing._parent = self
             existing._handlers = []
         # .. and add the other/new handlers
         for h in storable.handlers:
-            h._parent = existing # PY2 requires to use `_handlers` instead of `handlers`
+            h._parent = existing
             if existing.hasVersion(h.version):
                 if replace:
                     existing._handlers = [ h if h.version is h0.version else h0 \
@@ -394,4 +505,14 @@ class CallStack(object):
         return self.stack.__missing__(i)
     def pop(self):
         return self.stack.pop()
+
+
+def copy_handler(handler):
+    return StorableHandler(handler.version, handler.exposes, handler._peek, handler._poke, \
+            handler.peek_option, handler.poke_option)
+
+def copy_storable(storable, constructor=None):
+    if constructor is None:
+        constructor = type(storable)
+    return constructor(storable.python_type, storable.storable_type, storable.handlers)
 

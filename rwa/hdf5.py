@@ -15,6 +15,8 @@ import tempfile
 import itertools
 from .storable import *
 from .generic import *
+from .scipy import *
+from .pandas import *
 from .lazy import FileStore
 from .sequence import *
 
@@ -100,15 +102,6 @@ try:
 except ImportError:
     pass
 else:
-    # change version numbers of the candidate new default implementation
-    _pandas_storables = []
-    for _s in pandas_storables:
-        assert not _s.handlers[1:]
-        if _s.python_type in (Series, DataFrame):
-            _s.handlers[0].version = (2,)
-        _pandas_storables.append(_s)
-    pandas_storables = _pandas_storables
-
     # former default implementation routines
 
     def copy_hdf(from_table, to_table, name):
@@ -143,6 +136,31 @@ else:
 
     default_Pandas = StorableHandler(peek=peek_Pandas, poke=poke_Pandas, version=(1,))
 
+    # new implementation from :mod:`rwa.generic`
+
+    rwa_params['pandas.use_tables'] = False
+
+    # modify the existing Storable instances for Series and DataFrame
+    # to account for the 'pandas.use_tables' option
+    class PandasStorable(Storable):
+        @property
+        def default_version(self):
+            if self.params.get('pandas.use_tables', None):
+                return (1,)
+    def _redefine(storable):
+        return copy_storable(storable, PandasStorable)
+
+    # change version numbers of the candidate new default implementation
+    _pandas_storables = []
+    for _s in pandas_storables:
+        assert not _s.handlers[1:]
+        if _s.python_type in (Series, DataFrame):
+            _s = _redefine(_s)
+            _s.handlers[0].version = (2,)
+        _pandas_storables.append(_s)
+    pandas_storables = _pandas_storables
+
+
     # test the availability of libhdf5
     try:
         import tables
@@ -175,7 +193,10 @@ string_storables = [\
         handlers=StorableHandler(poke=string_poke, peek=binary_peek)), \
     Storable(six.text_type, key='Python.unicode', \
         handlers=StorableHandler(poke=string_poke, peek=text_peek))]
-numpy_storables += [Storable(numpy.ndarray, handlers=StorableHandler(poke=native_poke, peek=native_peek))]
+
+numpy_storables += [Storable(numpy.ndarray, \
+        handlers=StorableHandler(poke=native_poke, peek=native_peek))]
+
 
 class SequenceV2(SequenceHandling):
     def suitable_record_name(self, name):
@@ -204,7 +225,6 @@ class SequenceV2(SequenceHandling):
         #else:
             return native_peek(store, container, _stack)
 
-import copy
 _seq_storables_v1 = list(seq_storables)
 _seq_handlers_v2 = SequenceV2().base_handlers()
 seq_storables_v2 = []
@@ -214,7 +234,7 @@ for _type, _handler in _seq_handlers_v2.items():
             del _seq_storables_v1[_i]
             break
     if _storable.python_type is _type:
-        _storable = copy.deepcopy(_storable)
+        _storable = copy_storable(_storable)
         _handler.version = (2,)
         _storable.handlers.append(_handler)
     else:
@@ -237,7 +257,7 @@ hdf5_storables = list(itertools.chain(\
 
 
 # global variable
-hdf5_service = StorableService()
+hdf5_service = StorableService(rwa_params)
 for s in hdf5_storables:
     hdf5_service.registerStorable(s)
 
@@ -329,10 +349,10 @@ class HDF5Store(FileStore):
         record.attrs.create(attr, to_attr(val))
         #print(('hdf5.setRecordAttr', record.name, attr, record.attrs[attr])) # DEBUG
 
-    def poke(self, objname, obj, container=None, visited=None, _stack=None):
+    def poke(self, objname, obj, container=None, visited=None, _stack=None, **kwargs):
         if container is None:
             container = self.store
-        FileStore.poke(self, objname, obj, container, visited=visited, _stack=_stack)
+        FileStore.poke(self, objname, obj, container, visited=visited, _stack=_stack, **kwargs)
 
     def pokeNative(self, objname, obj, container):
         if obj is None:
@@ -351,10 +371,10 @@ class HDF5Store(FileStore):
         existing_container, existing_objname = existing
         container[objname] = existing_container[existing_objname] # HDF5 hard link
 
-    def peek(self, objname, record=None, _stack=None):
+    def peek(self, objname, record=None, _stack=None, **kwargs):
         if record is None:
             record = self.store
-        return FileStore.peek(self, objname, record, _stack=_stack)
+        return FileStore.peek(self, objname, record, _stack=_stack, **kwargs)
 
     def peekNative(self, record):
         try:
@@ -366,8 +386,8 @@ class HDF5Store(FileStore):
     def isNativeType(self, obj):
         return None # don't know; should `tryPokeAny` instead
 
-    def tryPokeAny(self, objname, obj, record, visited=None, _stack=None):
-		# `pokeNative` may not raise any exception with iterable objects;
+    def tryPokeAny(self, objname, obj, record, visited=None, _stack=None, **kwargs):
+	# `pokeNative` may not raise any exception with iterable objects;
         # check for the presence of `__dict__` and `__slots__`
         tb = self.verbose
         try:
@@ -386,7 +406,8 @@ class HDF5Store(FileStore):
                     traceback.print_exc()
                 raise TypeError("unsupported type {} for object '{}'".format(_type, objname))
             storable = self.defaultStorable(_type, agnostic=self.isAgnostic(_type))
-            self.pokeStorable(storable, objname, obj, record, visited=visited, _stack=_stack)
+            self.pokeStorable(storable, objname, obj, record, visited=visited, _stack=_stack,\
+                **kwargs)
 
     def isAgnostic(self, storable_type):
         modules = []

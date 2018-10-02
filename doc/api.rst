@@ -52,3 +52,21 @@ rwa.hdf5 module
     :undoc-members:
     :show-inheritance:
 
+
+rwa.scipy module
+----------------
+
+.. automodule:: rwa.scipy
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+rwa.pandas module
+-----------------
+
+.. automodule:: rwa.pandas
+    :members:
+    :undoc-members:
+    :show-inheritance:
+

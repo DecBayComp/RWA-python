@@ -238,7 +238,7 @@ class GenericStore(StoreBase):
         """
         raise TypeError('record not supported')
 
-    def pokeStorable(self, storable, objname, obj, container, visited=None, _stack=None):
+    def pokeStorable(self, storable, objname, obj, container, visited=None, _stack=None, **kwargs):
         """
         Arguments:
 
@@ -254,9 +254,12 @@ class GenericStore(StoreBase):
                 passed by references; keys are the objects' IDs.
 
             _stack (CallStack): stack of parent object names.
+
+        Trailing keyword arguments are passed to the :class:`Storable` instance's
+        :attr:`~Storable.poke`.
         """
         #print((objname, storable.storable_type)) # debug
-        storable.poke(self, objname, obj, container, visited=visited, _stack=_stack)
+        storable.poke(self, objname, obj, container, visited=visited, _stack=_stack, **kwargs)
         try:
             record = self.getRecord(objname, container)
         except KeyError:
@@ -270,7 +273,7 @@ class GenericStore(StoreBase):
             if storable.version is not None:
                 self.setRecordAttr('version', from_version(storable.version), record)
 
-    def pokeVisited(self, objname, obj, record, existing, visited=None, _stack=None):
+    def pokeVisited(self, objname, obj, record, existing, visited=None, _stack=None, **kwargs):
         """
         Serialize an already serialized object.
 
@@ -290,11 +293,12 @@ class GenericStore(StoreBase):
             visited (dict): already serialized objects.
 
             _stack (CallStack): stack of parent object names.
+
         """
         if self.hasPythonType(obj):
             storable = self.byPythonType(obj).asVersion()
             self.pokeStorable(storable, objname, obj, record, visited=visited, \
-                _stack=_stack)
+                _stack=_stack, **kwargs)
         else:
             try:
                 self.pokeNative(objname, obj, record)
@@ -304,7 +308,7 @@ class GenericStore(StoreBase):
                 self.dump_stack(_stack)
                 raise
 
-    def poke(self, objname, obj, record, visited=None, _stack=None):
+    def poke(self, objname, obj, record, visited=None, _stack=None, **kwargs):
         top_call = _stack is None
         if top_call:
             _stack = CallStack()
@@ -319,7 +323,7 @@ class GenericStore(StoreBase):
                 # expand the content of the `__dict__` dictionary
                 __dict__ = obj
                 for objname, obj in __dict__.items():
-                    self.poke(objname, obj, record, visited=visited, _stack=_stack)
+                    self.poke(objname, obj, record, visited=visited, _stack=_stack, **kwargs)
                     # rewind the stack up to __dict__'s parent
                     _stack.pointer = ptr
             elif obj is not None:
@@ -338,17 +342,17 @@ class GenericStore(StoreBase):
                         pass
                     else:
                         return self.pokeVisited(objname, obj, record, previous, \
-                            visited=visited, _stack=_stack)
+                            visited=visited, _stack=_stack, **kwargs)
                     visited[id(obj)] = (record, objname)
                 if self.hasPythonType(obj):
                     storable = self.byPythonType(obj).asVersion()
                     self.pokeStorable(storable, objname, obj, record, visited=visited, \
-                        _stack=_stack)
+                        _stack=_stack, **kwargs)
                 elif self.isNativeType(obj):
                     self.pokeNative(objname, obj, record)
                 else:
                     self.tryPokeAny(objname, obj, record, visited=visited, \
-                        _stack=_stack)
+                        _stack=_stack, **kwargs)
                 # rewind the stack
                 _stack.pointer = ptr
         except (SystemExit, KeyboardInterrupt):
@@ -359,7 +363,7 @@ class GenericStore(StoreBase):
             else:
                 raise
 
-    def tryPokeAny(self, objname, obj, record, visited=None, _stack=None):
+    def tryPokeAny(self, objname, obj, record, visited=None, _stack=None, **kwargs):
         """
         First try to poke with :meth:`pokeNative`.
         If this fails, generate a default storable instance and try with
@@ -383,7 +387,7 @@ class GenericStore(StoreBase):
         """
         raise TypeError('record not supported')
 
-    def peekStorable(self, storable, record, _stack=None):
+    def peekStorable(self, storable, record, _stack=None, **kwargs):
         """
         Arguments:
 
@@ -396,10 +400,13 @@ class GenericStore(StoreBase):
         Returns:
 
             any: deserialized object.
-        """
-        return storable.peek(self, record, _stack=_stack)
 
-    def peek(self, objname, container, _stack=None):
+        Trailing keyword arguments are passed to the :class:`Storable` instance's
+        :attr:`~Storable.peek`.
+        """
+        return storable.peek(self, record, _stack=_stack, **kwargs)
+
+    def peek(self, objname, container, _stack=None, **kwargs):
         top_call = _stack is None
         if top_call:
             _stack = CallStack()
@@ -414,7 +421,7 @@ class GenericStore(StoreBase):
                     storable = self.byStorableType(t).asVersion(v)
                 except KeyError:
                     storable = self.defaultStorable(storable_type=t, version=to_version(v))
-                obj = self.peekStorable(storable, record, _stack=_stack)
+                obj = self.peekStorable(storable, record, _stack=_stack, **kwargs)
             else:
                 #print(objname) # debugging
                 obj = self.peekNative(record)
@@ -847,13 +854,6 @@ def peek_frozenset(s, c, _stack=None):
     return frozenset(peek_list(s, c, _stack=_stack))
 def peek_dict(s, c, _stack=None):
     items = peek_assoc(s, c, _stack=_stack)
-    #if items:
-    #       if not all([ len(i) == 2 for i in items ]):
-    #           print(items)
-    #           raise ValueError('missing keys')
-    #       if len(set(k for k,_ in items)) < len(items):
-    #           print(items)
-    #           raise ValueError('duplicate keys')
     return dict(items)
 def peek_deque(s, c, _stack=None):
     return deque(peek_list(s, c, _stack=_stack))
@@ -908,6 +908,7 @@ def force_auto(service, _type):
 
         _type (type): type to be autoserialized.
 
+    **Not tested**
     """
     storable = service.byPythonType(_type, istype=True)
     version = max(handler.version[0] for handler in storable.handlers) + 1
@@ -915,6 +916,7 @@ def force_auto(service, _type):
     storable.handlers.append(_storable.handlers[0])
 
 
+# callables
 class _Class(object):
     __slots__ = ('member_descriptor',)
     @property
@@ -976,25 +978,6 @@ type_storable = Storable(type, handlers=StorableHandler(
             poke=poke_native(format_type)))
 
 
-try:
-    import numpy
-except ImportError:
-    numpy_storables = []
-else:
-    numpy_basic_types = (
-        numpy.bool_, numpy.int_, numpy.intc, numpy.intp,
-        numpy.int8, numpy.int16, numpy.int32, numpy.int64,
-        numpy.uint8, numpy.uint16, numpy.uint32, numpy.uint64,
-        numpy.float_, numpy.float16, numpy.float32, numpy.float64,
-        numpy.complex_, numpy.complex64, numpy.complex128,
-        )
-
-    # numpy.dtype
-    numpy_storables = [\
-        Storable(numpy.dtype, handlers=StorableHandler(poke=poke_native(lambda t: t.str), \
-            peek=peek_native(numpy.dtype)))]
-
-
 def handler(init, exposes, version=None):
     """
     Simple handler with default `peek` and `poke` procedures.
@@ -1014,356 +997,29 @@ def handler(init, exposes, version=None):
     return StorableHandler(poke=poke(exposes), peek=peek(init, exposes), version=version)
 
 
-try:
-    from scipy.sparse import bsr_matrix, coo_matrix, csc_matrix, csr_matrix, \
-        dia_matrix, dok_matrix, lil_matrix
-except ImportError:
-    sparse_storables = []
-else:
-    # scipy.sparse storable instances
-    bsr_exposes = ['shape', 'data', 'indices', 'indptr']
-    def mk_bsr(shape, data, indices, indptr):
-        return bsr_matrix((data, indices, indptr), shape=shape)
-    bsr_handler = handler(mk_bsr, bsr_exposes)
-
-    coo_exposes = ['shape', 'data', 'row', 'col']
-    def mk_coo(shape, data, row, col):
-        return coo_matrix((data, (row, col)), shape=shape)
-    coo_handler = handler(mk_coo, coo_exposes)
-
-    csc_exposes = ['shape', 'data', 'indices', 'indptr']
-    def mk_csc(shape, data, indices, indptr):
-        return csc_matrix((data, indices, indptr), shape=shape)
-    csc_handler = handler(mk_csc, csc_exposes)
-
-    csr_exposes = ['shape', 'data', 'indices', 'indptr']
-    def mk_csr(shape, data, indices, indptr):
-        return csr_matrix((data, indices, indptr), shape=shape)
-    csr_handler = handler(mk_csr, csr_exposes)
-
-    dia_exposes = ['shape', 'data', 'offsets']
-    def mk_dia(shape, data, offsets):
-        return dia_matrix((data, offsets), shape=shape)
-    dia_handler = handler(mk_dia, dia_exposes)
-
-    # previously
-    def dok_recommend(*args, **kwargs):
-        raise TypeErrorWithAlternative('dok_matrix', 'coo_matrix')
-    dok_handler = StorableHandler(poke=dok_recommend, peek=dok_recommend)
-    # now
-    def dok_poke(service, matname, mat, container, visited=None, _stack=None):
-        coo_handler.poke(service, matname, mat.tocoo(), container, visited=visited, \
-            _stack=_stack)
-    def dok_peek(service, container, _stack=None):
-        return coo_handler.peek(service, container, _stack=_stack).todok()
-    dok_handler = StorableHandler(poke=dok_poke, peek=dok_peek)
-
-    # previously
-    def lil_recommend(*args, **kwargs):
-        raise TypeErrorWithAlternative('lil_matrix', ('csr_matrix', 'csc_matrix'))
-    lil_handler = StorableHandler(poke=lil_recommend, peek=lil_recommend)
-    # now
-    def lil_poke(service, matname, mat, container, visited=None, _stack=None):
-        csr_handler.poke(service, matname, mat.tocsr(), container, visited=visited, \
-            _stack=_stack)
-    def lil_peek(service, container, _stack=None):
-        return csr_handler.peek(service, container, _stack=_stack).tolil()
-    lil_handler = StorableHandler(poke=lil_poke, peek=lil_peek)
-
-
-    sparse_storables = [Storable(bsr_matrix, handlers=bsr_handler), \
-        Storable(coo_matrix, handlers=coo_handler), \
-        Storable(csc_matrix, handlers=csc_handler), \
-        Storable(csr_matrix, handlers=csr_handler), \
-        Storable(dia_matrix, handlers=dia_handler), \
-        Storable(dok_matrix, handlers=dok_handler), \
-        Storable(lil_matrix, handlers=lil_handler)]
-
-
-spatial_storables = []
-try:
-    import scipy.spatial
-except ImportError:
-    pass
-else:
-    # scipy.sparse storable instances for Python2.
-    # Python3 can autoserialize ConvexHull and may actually do a better job
-    Delaunay_exposes = ['points', 'simplices', 'neighbors', 'equations', 'paraboloid_scale', 'paraboloid_shift', 'transform', 'vertex_to_simplex', 'convex_hull', 'coplanar', 'vertex_neighbor_vertices']
-    ConvexHull_exposes = ['points', 'vertices', 'simplices', 'neighbors', 'equations', 'coplanar', 'area', 'volume']
-    Voronoi_exposes = ['points', 'vertices', 'ridge_points', 'ridge_vertices', 'regions', 'point_region']
-
-    _scipy_spatial_types = [
-        ('Delaunay', Delaunay_exposes, ('simplices', )),
-        ('ConvexHull', ConvexHull_exposes, ('vertices', 'equations')),
-        ('Voronoi', Voronoi_exposes, ('regions', 'point_region'))]
-
-    def scipy_spatial_storable(name, exposes, check):
-        _fallback = namedtuple(name, exposes)
-        _type = getattr(scipy.spatial.qhull, name)
-        def _init(*args):
-            struct = _type(args[0])
-            check_attrs = list(check) # copy
-            ok = True
-            while ok and check_attrs:
-                attr = check_attrs.pop()
-                i = exposes.index(attr)
-                try:
-                    arg = getattr(struct, attr)
-                    if isinstance(args[i], list):
-                        ok = arg == args[i]
-                    else:
-                        ok = numpy.all(numpy.isclose(arg, args[i]))
-                except (SystemExit, KeyboardInterrupt):
-                    raise
-                except:
-                    #raise # debug
-                    ok = False
-            if not ok:
-                warn('object of type {} cannot be properly regenerated; using method-less fallback'.format(name), RuntimeWarning)
-                struct = _fallback(*args)
-            return struct
-        handlers = [handler(_init, exposes, version=(0,))] # Py2
-        if six.PY3:
-            auto = default_storable(_type)
-            assert not auto.handlers[1:]
-            assert handlers[0].version[0] < auto.handlers[0].version[0]
-            handlers.append(auto.handlers[0])
-        return Storable(_type, handlers=handlers)
-
-    spatial_storables += \
-        [ scipy_spatial_storable(*_specs) for _specs in _scipy_spatial_types ]
-
-
-try:
-    import pandas
-except ImportError:
-    pandas_storables = []
-else:
-    rwa_params['pandas.index.force_unicode']   = True
-    rwa_params['pandas.columns.force_unicode'] = True
-
-    _unicode = lambda _s: _s.decode('utf-8') if isinstance(_s, bytes) else _s
-    def _map(f, seq):
-        return type(seq)([ f(a) for a in seq ])
-    def _fmap(f):
-        return lambda seq: _map(f, seq)
-    def _map2(f, seq):
-        return _map(_fmap(f), seq)
-
-    def unicode_index(peek, attrs=None, params=rwa_params):
-        """Helper for converting the `name` attribute (and others) of indices into unicode."""
-        attrs = set(attrs) if attrs else set()
-        attrs.add('name')
-        def _peek_index(*args, **kwargs):
-            index = peek(*args, **kwargs)
-            if params.get('pandas.index.force_unicode', None):
-                for attr in attrs:
-                    s = getattr(index, attr)
-                    if isinstance(s, strtypes):
-                        setattr(index, attr, _unicode(s))
-                    elif s is not None:
-                        setattr(index, attr, _map(_unicode, s))
-            return index
-        return _peek_index
-
-    poke_index = poke(['data', 'name'])
-    def poke_index(service, ixname, ix, parent_container, visited=None, _stack=None):
-        container = service.newContainer(ixname, ix, parent_container)
-        service.poke('data', ix.tolist(), container, visited=visited, _stack=_stack)
-        service.poke('name', ix.name, container, visited=visited, _stack=_stack)
-
-    def peek_index(init=pandas.Index, params=rwa_params):
-        def _peek_index(service, *args, **kwargs):
-            data = service.peek('data', *args, **kwargs)
-            try:
-                name = service.peek('name', *args, **kwargs)
-            except (SystemExit, KeyboardInterrupt):
-                raise
-            except:
-                name = None
-            if params.get('pandas.index.force_unicode', None):
-                data = _map(_unicode, data)
-                if name is not None:
-                    if isinstance(name, strtypes):
-                        name = _unicode(name)
-                    else:
-                        # is this possible?
-                        name = _map(_unicode, name)
-            return init(data, name=name)
-        return _peek_index
-    def peek_numerical_index(init=pandas.Index, func=None):
-        """
-        Peek factory for Pandas numerical indices.
-        """
-        if func is None:
-            _peek_index = peek_with_kwargs(init, ['data'])
-        else:
-            def _peek_index(service, *args, **kwargs):
-                data = func(service.peek('data', *args, **kwargs))
-                try:
-                    name = service.peek('name', *args, **kwargs)
-                except (SystemExit, KeyboardInterrupt):
-                    raise
-                except:
-                    name = None
-                return init(data, name=name)
-        return unicode_index(_peek_index)
-
-    def peek_multiindex(*args, **kwargs):
-        attrs = peek_as_dict(*args, **kwargs)
-        if rwa_params.get('pandas.index.force_unicode', None):
-            try:
-                labels = attrs['labels']
-            except KeyError:
-                pass
-            else:
-                #attrs['labels'] = \
-                #    [ [ _unicode(_label) for _label in _labels ] for _labels in labels ]
-                attrs['labels'] = _map2(_unicode, labels)
-            try:
-                names = attrs['names']
-            except KeyError:
-                pass
-            else:
-                #attrs['names'] = [ _unicode(_name) for _name in names ]
-                attrs['names'] = _map(_unicode, names)
-        return pandas.MultiIndex(**attrs)
-
-    #poke_multiindex = poke(['levels', 'labels', 'names'])
-    def poke_multiindex(service, ixname, ix, parent_container, visited=None, _stack=None):
-        """Poke procedure for pandas.MultiIndex.
-
-        Converts all the pandas.core.base.FrozenList into tuples."""
-        container = service.newContainer(ixname, ix, parent_container)
-        for attrname in ('levels', 'labels'):
-            attr = tuple( tuple(item) for item in getattr(ix, attrname) )
-            service.poke(attrname, attr, container, visited=visited, _stack=_stack)
-        attrname = 'names'
-        attr = tuple( getattr(ix, attrname) )
-        service.poke(attrname, attr, container, visited=visited, _stack=_stack)
-
-    try:
-        # UInt64Index is missing in 0.17.1
-        pandas_UInt64Index = pandas.UInt64Index
-        peek_uint64index = peek_numerical_index(pandas.UInt64Index)
-    except AttributeError:
-        # convert UInt64 into Int64
-        class pandas_UInt64Index(object):
-            """
-            Placeholder type.
-            """
-            __slot__ = ()
-            pass
-        peek_uint64index = peek_numerical_index(pandas.Int64Index, lambda a: a.astype(np.int64))
-
-    poke_rangeindex = poke(['_start', '_stop', '_step', 'name'])
-    try:
-        # RangeIndex is missing in 0.17.1
-        pandas_RangeIndex = pandas.RangeIndex
-        peek_rangeindex = peek_with_kwargs(pandas.RangeIndex, ['_start', '_stop', '_step'])
-    except AttributeError:
-        # convert to Int64Index
-        class pandas_RangeIndex(object):
-            """
-            Placeholder type.
-            """
-            __slot__ = ()
-            pass
-        def peek_rangeindex(*args, **kwargs):
-            attrs = peek_as_dict(*args, **kwargs)
-            return pandas.Int64Index( \
-                range( \
-                    start=attrs.pop('_start', None), \
-                    stop=attrs.pop('_stop', None), \
-                    step=attrs.pop('_step', None)), \
-                **attrs)
-
-    # some Pandas types have moved several times; force the key
-    pandas_storables = [ \
-        Storable(pandas.Index, \
-         key='Python.pandas.core.index.Index', \
-         handlers=StorableHandler(poke=poke_index, peek=peek_index())), \
-        Storable(pandas.Int64Index, \
-         key='Python.pandas.core.index.Int64Index', \
-         handlers=StorableHandler(poke=poke_index, \
-            peek=peek_numerical_index(pandas.Int64Index))), \
-        Storable(pandas_UInt64Index, \
-         key='Python.pandas.core.index.UInt64Index', \
-         handlers=StorableHandler(poke=poke_index, peek=peek_uint64index)), \
-        Storable(pandas.Float64Index, \
-         key='Python.pandas.core.index.Float64Index', \
-         handlers=StorableHandler(poke=poke_index, \
-            peek=peek_numerical_index(pandas.Float64Index))), \
-        Storable(pandas_RangeIndex, \
-         key='Python.pandas.core.index.RangeIndex', \
-         handlers=StorableHandler(poke=poke_rangeindex, peek=unicode_index(peek_rangeindex))), \
-        Storable(pandas.MultiIndex, \
-         key='Python.pandas.core.index.MultiIndex', \
-         handlers=StorableHandler(poke=poke_multiindex, peek=peek_multiindex))]
-
-    class DebugWarning(RuntimeWarning):
-        pass
-
-    try:
-        # Categorical and CategoricalIndex might not be available in the 0.17.1 version
-
-        # not implemented yet
-        def _peek_categorical(*args, **kwargs):
-            attrs = peek_as_dict(*args, **kwargs)
-            codes = attrs.pop('codes') # `codes` is required
-            categories = attrs.pop('categories') # `categories` is required
-            return pandas.Categorical.from_codes(codes, categories)
-        peek_categoricalindex = unicode_index( \
-            peek_with_kwargs(pandas.CategoricalIndex, ['codes']), \
-            ['categories'])
-
-        #pandas_storables += [ \
-        [ \
-            Storable(pandas.CategoricalIndex, \
-             key='Python.pandas.core.index.CategoricalIndex', \
-             handlers=StorableHandler(poke=poke(['codes','categories','name']), \
-                peek=peek_categoricalindex))]
-
-    except AttributeError:
-        pass
-
-    # `values` is not necessarily the underlying data; may be a coerced representation instead
-    poke_series = poke(['data', 'index'])
-    peek_series = peek(pandas.Series, ['data', 'index'])
-    if True:#six.PY2:
-        # `data` is deprecated
-        def poke_series(service, sname, s, parent_container, visited=None, _stack=None):
-            container = service.newContainer(sname, s, parent_container)
-            service.poke('data', s.values, container, visited=visited, _stack=_stack)
-            service.poke('index', s.index, container, visited=visited, _stack=_stack)
-
-    # `poke_dataframe` is similar to `poke` but converts part of the dataframe into
-    # an ordered dictionnary of columns
-    def poke_dataframe(service, dfname, df, parent_container, visited=None, _stack=None):
-        container = service.newContainer(dfname, df, parent_container)
-        data = OrderedDict([ (colname, df[colname].values) for colname in df.columns ])
-        service.poke('data', data, container, visited=visited, _stack=_stack)
-        service.poke('index', df.index, container, visited=visited, _stack=_stack)
-
-    def peek_dataframe(params=rwa_params):
-        """Closure for `_peek_dataframe` with `params` and `__peek_dataframe`."""
-        __peek_dataframe = peek(pandas.DataFrame, ['data', 'index'])
-        def _peek_dataframe(*args, **kwargs):
-            df = __peek_dataframe(*args, **kwargs)
-            if params.get('pandas.columns.force_unicode', None):
-                df.columns = _map(_unicode, df.columns)
-            return df
-        return _peek_dataframe
-
-    pandas_storables += [ \
-        Storable(pandas.Series, handlers=StorableHandler(poke=poke_series, peek=peek_series)),
-        Storable(pandas.DataFrame, handlers=StorableHandler(poke=poke_dataframe, peek=peek_dataframe()))]
-
-
-
 def namedtuple_storable(namedtuple, *args, **kwargs):
     """
     Storable factory for named tuples.
     """
     return default_storable(namedtuple, namedtuple._fields, *args, **kwargs)
+
+
+# NumPy
+try:
+    import numpy
+except ImportError:
+    numpy_storables = []
+else:
+    numpy_basic_types = (
+        numpy.bool_, numpy.int_, numpy.intc, numpy.intp,
+        numpy.int8, numpy.int16, numpy.int32, numpy.int64,
+        numpy.uint8, numpy.uint16, numpy.uint32, numpy.uint64,
+        numpy.float_, numpy.float16, numpy.float32, numpy.float64,
+        numpy.complex_, numpy.complex64, numpy.complex128,
+        )
+
+    # numpy.dtype
+    numpy_storables = [\
+        Storable(numpy.dtype, handlers=StorableHandler(poke=poke_native(lambda t: t.str), \
+            peek=peek_native(numpy.dtype)))]
 
