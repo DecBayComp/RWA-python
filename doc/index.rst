@@ -75,7 +75,7 @@ Explicitly supported datatypes
 * any datatype supported by `h5py <http://docs.h5py.org/en/stable/faq.html#what-datatypes-are-supported>`_
 * *type*
 * sequences and collections including *tuple*, *list*, *frozenset*, *set*, *dict*, *namedtuple*, *deque*, *OrderedDict*, *Counter*, *defaultdict* and *memoryview*
-* some *pandas* datatypes including *Index*, *Int64Index*, *UInt64Index*, *Float64Index*, *RangeIndex*, *MultiIndex*, *Categorical*, *Series*, *DataFrame* and *Panel* (*Panel* is supported only with package *tables* available)
+* some *pandas* datatypes including *Index*, *Int64Index*, *UInt64Index*, *Float64Index*, *RangeIndex*, *MultiIndex*, *Categorical*, *CategoricalIndex*, *Series*, *DataFrame* and *Panel* (*Panel* is supported only with package *tables* available)
 * in *scipy.sparse*, types *bsr_matrix*, *coo_matrix*, *csc_matrix*, *csr_matrix*, *dia_matrix*, *dok_matrix* and *lil_matrix*
 
 The following datatypes are implicitly supported with |py3| and are serialized in |py2| with explicit rules:

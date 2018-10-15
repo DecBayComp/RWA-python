@@ -302,6 +302,7 @@ _overwrites = {
     dict:   None,
     collections.deque:      list,
     collections.OrderedDict:    None,
+    memoryview: None,
     }
 #try:
 #    import pandas

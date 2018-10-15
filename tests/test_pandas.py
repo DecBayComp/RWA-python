@@ -124,11 +124,20 @@ class TestPandasTypes(object):
                 print(t)
                 val = store.peek(t)
                 assert type(val) is type(data[t])
-                assert np.all(val.codes == data[t].codes)
-                assert val.categories.tolist() == as_unicode(data[t].categories.tolist())
-                assert val.ordered == data[t].ordered
+                if hasattr(data[t], 'codes'):
+                    assert np.all(val.codes == data[t].codes)
+                if hasattr(data[t], '_data'):
+                    assert val._data == data[t]._data
+                if hasattr(data[t], 'categories'):
+                    assert val.categories.tolist() == as_unicode(data[t].categories.tolist())
+                if hasattr(data[t], 'ordered'):
+                    assert val.ordered == data[t].ordered
                 if hasattr(data[t], 'name'):
                     assert val.name == as_unicode(data[t].name)
+                elif hasattr(data[t], '_name'):
+                    assert val._name == as_unicode(data[t]._name)
+                if hasattr(data[t], '_dtype'):
+                    assert val._dtype == data[t]._dtype
         finally:
             store.close()
 

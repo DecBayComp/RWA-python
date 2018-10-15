@@ -1,4 +1,6 @@
 
+from __future__ import absolute_import
+
 import os
 import six
 import traceback
@@ -98,7 +100,7 @@ def _debug(f):
 
 
 try:
-    from pandas import read_hdf, Series, DataFrame
+    from pandas import Series, DataFrame
 except ImportError:
     pass
 else:
