@@ -100,7 +100,7 @@ def _debug(f):
 
 
 try:
-    from pandas import Series, DataFrame
+    from pandas import read_hdf, Series, DataFrame
 except ImportError:
     pass
 else:
