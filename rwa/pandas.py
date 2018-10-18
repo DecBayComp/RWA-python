@@ -63,7 +63,11 @@ else:
         service.poke('name', ix.name, container, visited=visited, _stack=_stack)
 
     def peek_index(service, container, _stack=None, force_unicode=None):
-        data = service.peek('data', container, _stack=_stack)
+        try:
+            data = service.peek('data', container, _stack=_stack)
+        except KeyError:
+            # try loading it as a generic sequence (backward compatibility)
+            data = service.byPythonType(list, True).peek(service, container, _stack=_stack)
         try:
             name = service.peek('name', container, _stack=_stack)
         except (SystemExit, KeyboardInterrupt):
