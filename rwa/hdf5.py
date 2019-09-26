@@ -303,13 +303,29 @@ class HDF5Store(FileStore):
     def __open__(self, resource, mode='auto'):
         if isinstance(resource, h5py.File): # either h5py.File or tables.File
             return resource
-        if mode is 'auto':
-            if os.path.isfile(resource):
-                return h5py.File(resource, 'r', libver='latest')
+        kwargs = {}
+        for kw in ('driver','libver','block_size','backing_store','memb_size'):
+            try:
+                arg = rwa_params['h5py.'+kw]
+            except KeyError:
+                pass
             else:
-                return h5py.File(resource, 'w', libver='latest')
+                kwargs[kw] = arg
         try:
-            return h5py.File(resource, mode)
+            buffering = rwa_params['io.buffering']
+        except KeyError:
+            pass
+        else:
+            import sys
+            if sys.platform.startswith('linux'):
+                kwargs['driver'] = kwargs.get('driver', 'stdio' if buffering else 'sec2')
+            #else silently ignore the parameter
+        if mode is 'auto':
+            mode = 'r' if os.path.isfile(resource) else 'w'
+            kwargs['libver'] = kwargs.get('libver', 'latest')
+            return h5py.File(resource, mode, **kwargs)
+        try:
+            return h5py.File(resource, mode, **kwargs)
         except IOError as e:
             if e.args[0] == 'Unable to open file (File signature not found)':
                 try:
