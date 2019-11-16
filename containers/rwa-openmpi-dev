@@ -1,0 +1,128 @@
+Bootstrap: docker
+From: ubuntu:xenial
+
+%help
+RWA-python is available in multiple Python environments:
+    python2.7 (aliases python2 and python)
+    python3.5 (alias python3)
+    python3.6
+    python3.7
+    python3.8
+The container OS is Ubuntu Xenial and can run on top of old OSes like CentOS6.
+
+%setup
+
+	echo "fr_FR.UTF-8 UTF-8" > ${SINGULARITY_ROOTFS}/etc/locale.gen
+    if ! [ -f ${SINGULARITY_ROOTFS}/root/get-pip.py ]; then
+        wget -P ${SINGULARITY_ROOTFS}/root/ -- https://bootstrap.pypa.io/get-pip.py
+    fi
+
+    # test local changes that have not been committed yet;
+    # to be run from any subdirectory in the RWA-python directory, e.g. containers, tests...
+    LOCAL="$(pwd)/.."
+    CONTAINED=${SINGULARITY_ROOTFS}/root/RWA-python
+    mkdir  -p ${CONTAINED}
+    cp -u  -t ${CONTAINED}/ \
+              ${LOCAL}/setup.py ${LOCAL}/requirements.txt \
+              ${LOCAL}/README.rst ${LOCAL}/LICENSE
+    cp -ru -t ${CONTAINED}/ ${LOCAL}/rwa ${LOCAL}/.git
+    cd ${CONTAINED} && git clean -xfd
+
+%post
+
+	ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime
+	apt-get update  -y
+	apt-get install -y --no-install-recommends locales
+	locale-gen
+
+	apt-get install -y --no-install-recommends libhdf5-openmpi-dev \
+		build-essential git software-properties-common pkg-config
+
+    # Py 2.7 and 3.5
+	apt-get install -y --no-install-recommends \
+        python python-pip python-setuptools python-wheel python-dev \
+        python-scipy python-h5py python-pandas \
+        python3 python3-setuptools python3-dev \
+        python-software-properties \
+        python-pytest python3-pytest
+        #python3-scipy python3-pandas \ # python3-numpy breaks h5py install for Py 3.8
+    easy_install3 pip
+
+    # Py 3.6, 3.7 and 3.8
+    add-apt-repository -y ppa:deadsnakes/ppa
+    apt-get update  -y
+	apt-get install -y --no-install-recommends \
+        python3.6 python3.7 python3.8 \
+        python3.6-dev python3.7-dev python3.8-dev \
+        python3.8-distutils
+    python3.6 /root/get-pip.py
+    python3.7 /root/get-pip.py
+    python3.8 /root/get-pip.py
+
+	cd /root
+	if [ -d RWA-python ]; then
+		cd RWA-python
+		git pull || true
+	else
+		git clone git://github.com/DecBayComp/RWA-python -b master
+		cd RWA-python
+	fi
+
+    export CC=mpicc
+    export HDF5_MPI="ON"
+    export HDF5_LIB=/usr/lib/x86_64-linux-gnu
+    cur=`pwd`; cd $HDF5_LIB
+    ln -s libhdf5_openmpi.so libhdf5.so
+    cd $cur
+
+	export LC_ALL=C
+    for version in 2.7 3.5 3.6 3.7 3.8; do
+        python="python${version}"
+        pip="$python -m pip"
+        if [ "$version" = "3.6" -o "$version" = "3.7" -o "$version" = "3.8" ]; then
+            #$python /root/get-pip.py
+            $pip install --upgrade --force-reinstall setuptools
+            $pip install pytest
+        else
+    	    : #$pip install --upgrade pip
+        fi
+        if [ "$version" = "3.8" ]; then
+            $pip install mpi4py
+            #$pip install --no-binary=h5py h5py
+        fi
+
+	    #$pip uninstall -qy rwa-python || true
+    	$pip install . -r requirements.txt
+
+        for pkg in scipy pandas; do
+            if [ -z "$($pip show $pkg)" ]; then
+                $pip install $pkg
+            fi
+        done
+    done
+
+	mkdir -p /pasteur
+
+%runscript
+
+    python="python2.7"
+    if [ -n "$1" ]; then
+        if [ "$1" = "-2" -o "$1" = "-27" ]; then
+            # nothing to do
+            shift
+        elif [ "$1" = "-3" -o "$1" = "-35" ]; then
+            python="python3.5"
+            shift
+        elif [ "$1" = "-36" ]; then
+            python="python3.6"
+            shift
+        elif [ "$1" = "-37" ]; then
+            python="python3.7"
+            shift
+        elif [ "$1" = "-38" ]; then
+            python="python3.8"
+            shift
+        fi
+    fi
+	exec $python $@
+
