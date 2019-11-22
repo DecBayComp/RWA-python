@@ -103,7 +103,7 @@ per default to emulate the behaviour of *tables*.
 Known issues
 ------------
 
-|py2|-serialized *scipy.spatial.Delaunay* can be deserialized in |py3| but not conversely.
+**[fixed in 0.8.3]** |py2|-serialized *scipy.spatial.Delaunay* can be deserialized in |py3| but not conversely.
 
 *pandas.CategoricalIndex* support is broken.
 

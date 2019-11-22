@@ -71,7 +71,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'RWA-python'
-copyright = u'2017, Institut Pasteur, François Laurent'
+copyright = u'2017-2019, Institut Pasteur, François Laurent'
 author = u'François Laurent'
 
 # The version info for the project you're documenting, acts as replacement for
