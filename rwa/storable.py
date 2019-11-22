@@ -121,6 +121,12 @@ class StorableHandler(object):
                     kwargs[option] = prm
         self._poke(*args, **kwargs)
 
+    def __str__(self):
+        if self._parent is None:
+            return 'StorableHandler<storable_type=(not registered), python_type=(not registered), version={}, exposes={}>'.format(self.version, self.exposes)
+        else:
+            return 'StorableHandler<storable_type={}, python_type={}, version={}, exposes={}>'.format(self.storable_type, self.python_type, self.version, self.exposes)
+
 
 
 class Storable(object):

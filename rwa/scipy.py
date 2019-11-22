@@ -4,6 +4,12 @@ from __future__ import absolute_import
 from .generic import *
 
 
+class ScipyStorable(Storable):
+    @property
+    def default_version(self):
+        if six.PY2:
+            return min([ h.version for h in self.handlers ])
+
 try:
     from scipy.sparse import bsr_matrix, coo_matrix, csc_matrix, csr_matrix, \
         dia_matrix, dok_matrix, lil_matrix
@@ -80,43 +86,60 @@ else:
     ConvexHull_exposes = ['points', 'vertices', 'simplices', 'neighbors', 'equations', 'coplanar', 'area', 'volume']
     Voronoi_exposes = ['points', 'vertices', 'ridge_points', 'ridge_vertices', 'regions', 'point_region']
 
-    _scipy_spatial_types = [
-        ('Delaunay', Delaunay_exposes, ('simplices', )),
-        ('ConvexHull', ConvexHull_exposes, ('vertices', 'equations')),
-        ('Voronoi', Voronoi_exposes, ('regions', 'point_region'))]
+    Delaunay_v1_exposes = [ '_points', 'coplanar', 'equations', 'good', 'max_bound', 'min_bound', 'ndim', 'neighbors', 'npoints', 'nsimplex', 'paraboloid_scale', 'paraboloid_shift', 'simplices', 'vertices' ]
+    ConvexHull_v1_exposes = [ '_points', '_vertices', 'area', 'coplanar', 'equations', 'max_bound', 'min_bound', 'ndim', 'neighbors', 'npoints', 'nsimplex', 'simplices', 'volume' ]
+    Voronoi_v1_exposes = [ '_points', 'max_bound', 'min_bound', 'ndim', 'npoints', 'point_region', 'regions', 'ridge_points', 'ridge_vertices', 'vertices' ]
 
-    def scipy_spatial_storable(name, exposes, check):
+    _scipy_spatial_types = [
+        ('Delaunay', Delaunay_exposes, Delaunay_v1_exposes, ('simplices', )),
+        ('ConvexHull', ConvexHull_exposes, ConvexHull_v1_exposes, ('vertices', 'equations')),
+        ('Voronoi', Voronoi_exposes, Voronoi_v1_exposes, ('regions', 'point_region'))]
+
+    def scipy_spatial_storable(name, exposes, v1_exposes, check):
         _fallback = namedtuple(name, exposes)
         _type = getattr(scipy.spatial.qhull, name)
-        def _init(*args):
-            struct = _type(args[0])
-            check_attrs = list(check) # copy
-            ok = True
-            while ok and check_attrs:
-                attr = check_attrs.pop()
-                i = exposes.index(attr)
-                try:
-                    arg = getattr(struct, attr)
-                    if isinstance(args[i], list):
-                        ok = arg == args[i]
-                    else:
-                        ok = numpy.all(numpy.isclose(arg, args[i]))
-                except (SystemExit, KeyboardInterrupt):
-                    raise
-                except:
-                    #raise # debug
-                    ok = False
-            if not ok:
-                warn('object of type {} cannot be properly regenerated; using method-less fallback'.format(name), RuntimeWarning)
-                struct = _fallback(*args)
-            return struct
-        handlers = [handler(_init, exposes, version=(0,))] # Py2
+        def _init(_exposes):
+            def __init(*args):
+                #print(args) # debug
+                struct = _type(args[0])
+                check_attrs = list(check) # copy
+                ok = True
+                while ok and check_attrs:
+                    attr = check_attrs.pop()
+                    try:
+                        i = _exposes.index(attr)
+                    except ValueError:
+                        if attr[0] == '_':
+                            attr = attr[1:]
+                        else:
+                            attr = '_'+attr
+                    i = _exposes.index(attr)
+                    try:
+                        arg = getattr(struct, attr)
+                        if isinstance(args[i], list):
+                            ok = arg == args[i]
+                        else:
+                            ok = numpy.all(numpy.isclose(arg, args[i]))
+                    except (SystemExit, KeyboardInterrupt):
+                        raise
+                    except:
+                        #print(attr, arg, args[i]) # debug
+                        raise # debug
+                        #ok = False
+                if not ok:
+                    warn("object of type '{}' could not be properly regenerated from the `points` argument only; using method-free fallback".format(name), RuntimeWarning)
+                    struct = _fallback(*args)
+                return struct
+            return __init
+        handlers = [handler(_init(exposes), exposes, version=(0,))] # Py2
         if six.PY3:
             auto = default_storable(_type)
             assert not auto.handlers[1:]
             assert handlers[0].version[0] < auto.handlers[0].version[0]
             handlers.append(auto.handlers[0])
-        return Storable(_type, handlers=handlers)
+        elif six.PY2 and v1_exposes:
+            handlers.append(handler(_init(v1_exposes), v1_exposes, version=(1,)))
+        return ScipyStorable(_type, handlers=handlers)
 
     spatial_storables += \
         [ scipy_spatial_storable(*_specs) for _specs in _scipy_spatial_types ]

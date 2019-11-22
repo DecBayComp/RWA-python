@@ -166,9 +166,9 @@ else:
             attrs = peek_as_dict(*args, **kwargs)
             return pandas.Int64Index( \
                 range( \
-                    start=attrs.pop('_start', None), \
-                    stop=attrs.pop('_stop', None), \
-                    step=attrs.pop('_step', None)), \
+                    attrs.pop('_start', None), \
+                    attrs.pop('_stop', None), \
+                    attrs.pop('_step', None)), \
                 **attrs)
 
     # some Pandas types have moved several times; force the key

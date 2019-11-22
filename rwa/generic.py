@@ -358,7 +358,7 @@ class GenericStore(StoreBase):
         except (SystemExit, KeyboardInterrupt):
             raise
         except Exception as e:
-            if top_call:
+            if top_call and not self.verbose:
                 raise _stack.exception(e)
             else:
                 raise
@@ -420,8 +420,27 @@ class GenericStore(StoreBase):
                     #print((objname, self.byStorableType(t).storable_type)) # debugging
                     storable = self.byStorableType(t).asVersion(v)
                 except KeyError:
-                    storable = self.defaultStorable(storable_type=t, version=to_version(v))
-                obj = self.peekStorable(storable, record, _stack=_stack, **kwargs)
+                    try:
+                        storable = self.defaultStorable(storable_type=t, version=to_version(v))
+                    except AutoSerialFailure as e:
+                        exc = self.diagnosePeekFailure(container, record, t, v, e)
+                        if exc is None:
+                            pass
+                        else:
+                            raise exc
+                try:
+                    obj = self.peekStorable(storable, record, _stack=_stack, **kwargs)
+                except (SystemExit, KeyboardInterrupt):
+                    raise
+                except Exception as e:
+                    if self.verbose:
+                        exc = self.diagnosePeekFailure(container, record, t, v, e)
+                        if exc is None:
+                            pass
+                        else:
+                            raise exc
+                    else:
+                        raise
             else:
                 #print(objname) # debugging
                 obj = self.peekNative(record)
@@ -430,10 +449,22 @@ class GenericStore(StoreBase):
         except (SystemExit, KeyboardInterrupt):
             raise
         except Exception as e:
-            if top_call:
+            if top_call and not self.verbose:
                 raise _stack.exception(e)
             else:
                 raise
+
+    def diagnosePeekFailure(self, container, record, _type, version, exception):
+        tab = '  '
+        try:
+            msg = tab+exception.args[0].replace('\n', '\n'+tab)
+        except IndexError: # no args
+            return exception
+        msg_fmt = ("Automatic peek" if isinstance(exception, AutoSerialFailure) else "Peek") + \
+                " failed with error:\n{}\nAttributes found for type '{}' (v.{}):\n{}[ '{}' ]"
+        msg = msg_fmt.format(msg, _type, version, tab, "', '".join(list(self.iterObjectNames(container, record))))
+        exception.args = [msg] + list(exception.args[1:])
+        return exception
 
     def defaultStorable(self, python_type=None, storable_type=None, version=None, **kwargs):
         """
@@ -460,6 +491,9 @@ class GenericStore(StoreBase):
         self.storables.registerStorable(default_storable(python_type, \
                 version=version, storable_type=storable_type), **kwargs)
         return self.byPythonType(python_type, True).asVersion(version)
+
+    def iterObjectNames(self, container, record):
+        return record
 
 
 # pokes
@@ -679,21 +713,13 @@ def peek_assoc(store, container, _stack=None):
     Deserialize association lists.
     """
     assoc = []
-    try:
-        if store.getRecordAttr('key', container) == 'escaped':
-            for i in container:
-                assoc.append(store.peek(i, container, _stack=_stack))
-        else:
-            for i in container:
-                assoc.append((store.strRecord(i, container), store.peek(i, container, _stack=_stack)))
-        #print(assoc) # debugging
-    except TypeError as e:
-        try:
-            for i in container:
-                pass
-            raise e
-        except TypeError:
-            raise TypeError("container is not iterable; peek is not compatible\n\t{}".format(e.args[0]))
+    if store.getRecordAttr('key', container) == 'escaped':
+        for i in store.iterObjectNames(container):
+            assoc.append(store.peek(i, container, _stack=_stack))
+    else:
+        for i in store.iterObjectNames(container):
+            assoc.append((store.strRecord(i, container), store.peek(i, container, _stack=_stack)))
+    #print(assoc) # debugging
     return assoc
 
 
@@ -776,6 +802,10 @@ expose_extensions.append(most_exposes)
 expose_extensions.append(namedtuple_exposes)
 
 
+class AutoSerialFailure(NotImplementedError):
+    pass
+
+
 def default_storable(python_type, exposes=None, version=None, storable_type=None, peek=default_peek):
     """
     Default mechanics for building the storable instance for a type.
@@ -809,7 +839,7 @@ def default_storable(python_type, exposes=None, version=None, storable_type=None
                 if exposes:
                     break
         if not exposes:
-            raise AttributeError('`exposes` required for type: {!r}'.format(python_type))
+            raise AutoSerialFailure('`exposes` required for type: {!r}'.format(python_type))
     return Storable(python_type, key=storable_type, \
         handlers=StorableHandler(version=version, exposes=exposes, \
         poke=poke(exposes), peek=peek(python_type, exposes)))
@@ -894,6 +924,19 @@ def not_storable(_type):
 
     """
     return Storable(_type, handlers=StorableHandler(poke=fake_poke, peek=fail_peek(_type)))
+
+
+# range for Py <= 3.5
+#if not isinstance(range, type):
+#    def peek_range(s, c, _stack=None):
+#        return range(
+#                s.peek(c, '_start', _stack),
+#                s.peek(c, '_stop', _stack),
+#                s.peek(c, '_step', _stack))
+#    class future_range(object):
+#        pass
+#    seq_storables.append(
+#            Storable(future_range, 'Python.range', StorableHandler(poke=fake_poke, peek=peek_range)))
 
 
 # helpers for services and already registered storable instances
