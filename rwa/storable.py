@@ -198,16 +198,24 @@ class Storable(object):
         '''
         Default version (tuple) or ``None``. Read-only property to be overloaded.
 
-        Example implementation:
+        If returns ``None``, the latest version/handler will be selected.
+
+        Example implementations:
 
         .. code-block:: python
 
-            class MyStorableHandler(StorableHandler):
+            class MyStorable(Storable):
                 @property
                 def default_version(self):
                     if self.params.get('my_module.my_boolean_option', None):
                         return (2,) # default version is number 2
-                    #else: return None
+
+            class MyStorable(Storable):
+                @property
+                def default_version(self):
+                    if sys.version_info[0] == 2: # if Python 2
+                        # return earliest version instead of latest
+                        return min([ h.version for h in self.handlers ])
 
         '''
         return
