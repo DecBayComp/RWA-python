@@ -218,6 +218,7 @@ class FileStore(LazyStore):
         self.resource = resource
         self.temporary = None
         self.sane = True
+        resource = os.path.expanduser(resource)
         file_exists = os.path.isfile(resource)
         if self.writes(mode):
             dirname, basename = os.path.split(resource)
@@ -231,6 +232,8 @@ class FileStore(LazyStore):
                 import tempfile
                 f, temporary = tempfile.mkstemp()
                 os.close(f)
+                if not os.path.isfile(temporary):
+                    raise OSError('cannot make file: '+temporary)
             if self.verbose:
                 print('flushing into temporary file: {}'.format(temporary))
             self.temporary = temporary
