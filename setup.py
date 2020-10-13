@@ -7,7 +7,7 @@ from codecs import open
 import os.path
 
 # all requirements moved to requirements.txt
-install_requires = [] #'six', 'numpy', 'scipy', 'pandas', 'h5py']
+install_requires = ['six', 'numpy', 'scipy', 'pandas', 'h5py']
 extras_require = {}
 setup_requires = ['pytest-runner']
 tests_require = ['pytest']
@@ -24,7 +24,7 @@ except OSError:
 
 setup(
     name = 'rwa-python',
-    version = '0.8.3',
+    version = '0.8.4',
     description = 'HDF5-based serialization library for Python datatypes',
     long_description = long_description,
     url = 'https://github.com/DecBayComp/RWA-python',

@@ -320,7 +320,7 @@ class HDF5Store(FileStore):
             if sys.platform.startswith('linux'):
                 kwargs['driver'] = kwargs.get('driver', 'stdio' if buffering else 'sec2')
             #else silently ignore the parameter
-        if mode is 'auto':
+        if mode == 'auto':
             mode = 'r' if os.path.isfile(resource) else 'w'
             kwargs['libver'] = kwargs.get('libver', 'latest')
             return h5py.File(resource, mode, **kwargs)
