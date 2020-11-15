@@ -66,10 +66,10 @@ def native_peek(service, container, *args, **kargs):
     return val
 
 def binary_peek(service, container, *args, **kargs):
-    return container[...].tostring()
+    return container[...].tobytes()
 
 def text_peek(service, container, *args, **kargs):
-    return container[...].tostring().decode('utf-8')
+    return container[...].tobytes().decode('utf-8')
 
 
 def mk_vlen_poke(f):

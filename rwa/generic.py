@@ -462,7 +462,7 @@ class GenericStore(StoreBase):
             return exception
         msg_fmt = ("Automatic peek" if isinstance(exception, AutoSerialFailure) else "Peek") + \
                 " failed with error:\n{}\nAttributes found for type '{}' (v.{}):\n{}[ '{}' ]"
-        msg = msg_fmt.format(msg, _type, version, tab, "', '".join(list(self.iterObjectNames(container, record))))
+        msg = msg_fmt.format(msg, _type, version, tab, "', '".join(list(self.iterObjectNames(container))))
         exception.args = [msg] + list(exception.args[1:])
         return exception
 
@@ -492,8 +492,8 @@ class GenericStore(StoreBase):
                 version=version, storable_type=storable_type), **kwargs)
         return self.byPythonType(python_type, True).asVersion(version)
 
-    def iterObjectNames(self, container, record):
-        return record
+    def iterObjectNames(self, container):
+        return container
 
 
 # pokes
@@ -518,12 +518,16 @@ def poke(exposes):
             raise ValueError('generic poke not supported by store')
         #_stack = _add_to_stack(_stack, objname)
         for iobjname in exposes:
+            if isinstance(iobjname, (tuple, list)):
+                iobjname, irecname = iobjname
+            else:
+                irecname = iobjname
             try:
                 iobj = getattr(obj, iobjname)
             except AttributeError:
                 pass
             else:
-                store.poke(iobjname, iobj, sub_container, visited=visited, \
+                store.poke(irecname, iobj, sub_container, visited=visited, \
                     _stack=_stack)
     return _poke
 
@@ -705,8 +709,14 @@ def peek(init, exposes, debug=False):
             for objname in exposes ]
         if debug:
             print(args)
-        return init(*args)
+        obj = init(*args)
+        for i in store.iterObjectNames(container):
+            objname = store.strRecord(i, container)
+            if objname not in exposes:
+                setattr(obj, objname, store.peek(objname, container, _stack=_stack))
+        return obj
     return _peek
+
 
 def peek_assoc(store, container, _stack=None):
     """

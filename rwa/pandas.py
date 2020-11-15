@@ -120,6 +120,8 @@ else:
             else:
                 #attrs['names'] = [ _unicode(_name) for _name in names ]
                 attrs['names'] = _map(_unicode, names)
+        old2new = dict(levels='codes', labels='levels')
+        attrs = { old2new.get(k, k): attrs[k] for k in attrs }
         return pandas.MultiIndex(**attrs)
 
     #poke_multiindex = poke(['levels', 'labels', 'names'])
@@ -128,9 +130,16 @@ else:
 
         Converts all the pandas.core.base.FrozenList into tuples."""
         container = service.newContainer(ixname, ix, parent_container)
-        for attrname in ('levels', 'labels'):
-            attr = tuple( tuple(item) for item in getattr(ix, attrname) )
-            service.poke(attrname, attr, container, *args, **kwargs)
+        try:
+            ix.labels
+        except AttributeError:
+            for recname, attrname in (('levels','codes'), ('labels','levels')):
+                attr = tuple( tuple(item) for item in getattr(ix, attrname) )
+                service.poke(recname, attr, container, *args, **kwargs)
+        else:
+            for attrname in ('levels', 'labels'):
+                attr = tuple( tuple(item) for item in getattr(ix, attrname) )
+                service.poke(attrname, attr, container, *args, **kwargs)
         attrname = 'names'
         attr = tuple( getattr(ix, attrname) )
         service.poke(attrname, attr, container, *args, **kwargs)
@@ -149,7 +158,10 @@ else:
             pass
         peek_uint64index = peek_numerical_index(pandas.Int64Index, lambda a: a.astype(np.int64))
 
-    poke_rangeindex = poke(['_start', '_stop', '_step', 'name'])
+    if True:
+        poke_rangeindex = poke([('start','_start'), ('stop','_stop'), ('step','_step'), 'name'])
+    else:
+        poke_rangeindex = poke(['_start', '_stop', '_step', 'name'])
     try:
         # RangeIndex is missing in 0.17.1
         pandas_RangeIndex = pandas.RangeIndex
@@ -259,6 +271,11 @@ else:
         data = OrderedDict([ (colname, df[colname].values) for colname in df.columns ])
         service.poke('data', data, container, *args, **kwargs)
         service.poke('index', df.index, container, *args, **kwargs)
+        # new in 0.8.5
+        import string
+        for extra in df.__dict__:
+            if extra[0] in string.ascii_lowercase:
+                service.poke(extra, df.__dict__[extra], container, *args, **kwargs)
 
     _peek_dataframe = peek(pandas.DataFrame, ['data', 'index'])
     def peek_dataframe(service, container, _stack=None, force_unicode=None):

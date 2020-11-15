@@ -22,7 +22,7 @@ class TestSciPyTypes(object):
         k = range(1, len(i)+1)
         shape = (4, 5)
         coo = sparse.coo_matrix((k, (i,j)), shape=shape)
-        dense = coo.todense(True)
+        dense = coo.todense() # copy argument (originally set to True) was removed
         data = {'coo': coo,
             'csr': sparse.csr_matrix((k, (i,j)), shape=shape),
             'csc': sparse.csc_matrix((k, (i,j)), shape=shape),
