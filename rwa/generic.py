@@ -21,6 +21,14 @@ basetypes = (bool, ) + numtypes + strtypes
 rwa_params = dict()
 
 
+class ExplicitNone(object):
+    """ *new in 0.8.5* """
+    def __getattr__(self, attr):
+        return None
+    def __setattr__(self, attr, val):
+        pass
+
+
 def isreference(a):
     """
     Tell whether a variable is an object reference.
@@ -445,7 +453,10 @@ class GenericStore(StoreBase):
                 #print(objname) # debugging
                 obj = self.peekNative(record)
             _stack.pointer = ptr
-            return obj
+            if isinstance(obj, ExplicitNone):
+                return None
+            else:
+                return obj
         except (SystemExit, KeyboardInterrupt):
             raise
         except Exception as e:
@@ -661,7 +672,7 @@ def unsafe_peek(init):
         return init(*[ store.peek(attr, container, _stack=_stack) for attr in container ])
     return peek
 
-def peek_with_kwargs(init, args=[]):
+def peek_with_kwargs(init, args=[], permissive=False):
     """
     Make datatypes passing keyworded arguments to the constructor.
 
@@ -673,6 +684,8 @@ def peek_with_kwargs(init, args=[]):
 
         args (iterable): arguments NOT to be keyworded; order does matter.
 
+        permissive (bool): missing positional arguments are set to None (*new in 0.8.5*).
+
     Returns:
 
         callable: deserializer (`peek` routine).
@@ -680,11 +693,23 @@ def peek_with_kwargs(init, args=[]):
     All the peeked attributes that are not referenced in `args` are passed to `init` as
     keyworded arguments.
     """
-    def peek(store, container, _stack=None):
-        return init(\
-            *[ store.peek(attr, container, _stack=_stack) for attr in args ], \
-            **dict([ (attr, store.peek(attr, container, _stack=_stack)) \
-                for attr in container if attr not in args ]))
+    if permissive:
+        def try_peek(store, attr, container, _stack=None):
+            try:
+                return store.peek(attr, container, _stack=_stack)
+            except KeyError:
+                return None
+        def peek(store, container, _stack=None):
+            return init(\
+                *[ try_peek(store, attr, container, _stack) for attr in args ], \
+                **dict([ (attr, store.peek(attr, container, _stack=_stack)) \
+                    for attr in container if attr not in args ]))
+    else:
+        def peek(store, container, _stack=None):
+            return init(\
+                *[ store.peek(attr, container, _stack=_stack) for attr in args ], \
+                **dict([ (attr, store.peek(attr, container, _stack=_stack)) \
+                    for attr in container if attr not in args ]))
     return peek
 
 peek_as_dict = peek_with_kwargs(dict)

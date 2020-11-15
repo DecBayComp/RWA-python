@@ -8,6 +8,7 @@ RWA-python is available in multiple Python environments:
     python3.6
     python3.7
     python3.8
+    python3.9
 The container OS is Ubuntu Xenial and can run on top of old OSes like CentOS6.
 
 %setup
@@ -48,16 +49,17 @@ The container OS is Ubuntu Xenial and can run on top of old OSes like CentOS6.
         #python3-scipy python3-pandas \ # python3-numpy breaks h5py install for Py 3.8
     easy_install3 pip
 
-    # Py 3.6, 3.7 and 3.8
+    # Py 3.6, 3.7, 3.8 and 3.9
     add-apt-repository -y ppa:deadsnakes/ppa
     apt-get update  -y
 	apt-get install -y --no-install-recommends \
-        python3.6 python3.7 python3.8 \
-        python3.6-dev python3.7-dev python3.8-dev \
-        python3.8-distutils
+        python3.6 python3.7 python3.8 python3.9 \
+        python3.6-dev python3.7-dev python3.8-dev python3.9-dev \
+        python3.8-distutils python3.9-distutils
     python3.6 /root/get-pip.py
     python3.7 /root/get-pip.py
     python3.8 /root/get-pip.py
+    python3.9 /root/get-pip.py
 
 	cd /root
 	if [ -d RWA-python ]; then
@@ -76,17 +78,17 @@ The container OS is Ubuntu Xenial and can run on top of old OSes like CentOS6.
     cd $cur
 
 	export LC_ALL=C
-    for version in 2.7 3.5 3.6 3.7 3.8; do
+    for version in 2.7 3.5 3.6 3.7 3.8 3.9; do
         python="python${version}"
         pip="$python -m pip"
-        if [ "$version" = "3.6" -o "$version" = "3.7" -o "$version" = "3.8" ]; then
+        if [ "$version" = "3.6" -o "$version" = "3.7" -o "$version" = "3.8" -o "$version" = "3.9" ]; then
             #$python /root/get-pip.py
             $pip install --upgrade --force-reinstall setuptools
             $pip install pytest
         else
     	    : #$pip install --upgrade pip
         fi
-        if [ "$version" = "3.8" ]; then
+        if [ "$version" = "3.8" -o "$version" = "3.9" ]; then
             $pip install mpi4py
             #$pip install --no-binary=h5py h5py
         fi
@@ -121,6 +123,9 @@ The container OS is Ubuntu Xenial and can run on top of old OSes like CentOS6.
             shift
         elif [ "$1" = "-38" ]; then
             python="python3.8"
+            shift
+        elif [ "$1" = "-39" ]; then
+            python="python3.9"
             shift
         fi
     fi

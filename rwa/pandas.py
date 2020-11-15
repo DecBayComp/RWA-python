@@ -2,6 +2,10 @@
 from __future__ import absolute_import
 
 from .generic import *
+import warnings
+
+class Python35Warning(DeprecationWarning):
+    pass
 
 
 try:
@@ -165,7 +169,20 @@ else:
     try:
         # RangeIndex is missing in 0.17.1
         pandas_RangeIndex = pandas.RangeIndex
-        peek_rangeindex = peek_with_kwargs(pandas.RangeIndex, ['_start', '_stop', '_step'])
+        #peek_rangeindex = peek_with_kwargs(pandas.RangeIndex, ['_start', '_stop', '_step'])
+        def peek_rangeindex(*args, **kwargs):
+            attrs = peek_as_dict(*args, **kwargs)
+            if not attrs:
+                warnings.warn('broken pandas.RangeIndex from Python3.5', Python35Warning)
+                return ExplicitNone()
+            for a in ('_start', '_stop', '_step'):
+                try:
+                    v = attrs.pop(a)
+                except KeyError:
+                    pass
+                else:
+                    attrs[a[1:]] = v
+            return pandas.RangeIndex(**attrs)
     except AttributeError:
         # convert to Int64Index
         class pandas_RangeIndex(object):

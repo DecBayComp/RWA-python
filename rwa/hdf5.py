@@ -60,7 +60,7 @@ def vlen_poke(service, objname, obj, container, *args, **kargs):
 
 def native_peek(service, container, *args, **kargs):
     val = container[...]
-    if val.shape is (): # if scalar
+    if val.shape == (): # if scalar
         # convert numpy.<type>_ to <type> where <type> typically is bool, int, float
         val = val.tolist()
     return val
@@ -181,6 +181,7 @@ else:
             _pandas_storables.append(_s)
         pandas_storables = _pandas_storables
 
+        warnings.filterwarnings('ignore', category=FutureWarning, module='rwa.hdf5', lineno=186)
         try:
             from pandas import Panel # Panel has been flagged deprecated
         except ImportError:

@@ -4,9 +4,9 @@ versions="2.7 3.5 3.6 3.7 3.8 3.9"
 #versions="3.6 2.7"
 
 if [ "$(pwd | rev | cut -d/ -f1 | rev)" = "tests" ]; then
-    container="$(pwd)/../containers/rwa-openmpi-dev.simg"
+    container="$(pwd)/../containers/rwa-openmpi-dev.sif"
 elif [ -d "tests" ]; then
-    container="$(pwd)/containers/rwa-openmpi-dev.simg"
+    container="$(pwd)/containers/rwa-openmpi-dev.sif"
     cd tests
 else
     echo "Please run $0 if the tests directory"
@@ -17,8 +17,8 @@ fi
 if ! [ -f "$container" ]; then
     cd ../containers # if this crashes, $0 is not run from the tests directory as it should be
     echo "No container found; building one..."
-    echo "sudo singularity build rwa-openmpi-dev.simg rwa-openmpi-dev"
-    sudo singularity build rwa-openmpi-dev.simg rwa-openmpi-dev || exit
+    echo "sudo singularity build rwa-openmpi-dev.sif rwa-openmpi-dev"
+    sudo singularity build rwa-openmpi-dev.sif rwa-openmpi-dev || exit
     echo "======================================"
     echo "Container ready; starting the tests..."
     echo "======================================"
