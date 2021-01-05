@@ -498,7 +498,11 @@ class CallStack(object):
                     for i, record in enumerate(self.stack[1:]) ]
             return '\n'.join([first_line] + next_lines)
     def exception(self, exc):
-        return type(exc)('\n'.join((exc.args[0], str(self))), *exc.args[1:])
+        if exc.args:
+            #return type(exc)('\n{}\n{}'.format(str(self), exc.args[0]), *exc.args[1:])
+            return type(exc)('\n{}\n{}'.format(str(self), str(exc.args[0])), *exc.args[1:])
+        else:
+            return type(exc)(str(self))
     def clear(self):
         self.stack = []
     def __nonzero__(self):

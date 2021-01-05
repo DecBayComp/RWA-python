@@ -328,11 +328,11 @@ class HDF5Store(FileStore):
         try:
             return h5py.File(resource, mode, **kwargs)
         except IOError as e:
-            if e.args[0] == 'Unable to open file (File signature not found)':
+            if e.args[0].startswith('Unable to '):
                 try:
-                    raise FileNotFoundError(resource)
+                    raise FileNotFoundError(resource) from None
                 except NameError:
-                    raise OSError('file not found: {}'.format(resource))
+                    raise OSError('file not found: {}'.format(resource)) from None
 
     # backward compatibility property
     @property

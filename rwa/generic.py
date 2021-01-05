@@ -367,7 +367,7 @@ class GenericStore(StoreBase):
             raise
         except Exception as e:
             if top_call and not self.verbose:
-                raise _stack.exception(e)
+                raise _stack.exception(e) from None
             else:
                 raise
 
@@ -435,7 +435,7 @@ class GenericStore(StoreBase):
                         if exc is None:
                             pass
                         else:
-                            raise exc
+                            raise exc from None
                 try:
                     obj = self.peekStorable(storable, record, _stack=_stack, **kwargs)
                 except (SystemExit, KeyboardInterrupt):
@@ -446,7 +446,7 @@ class GenericStore(StoreBase):
                         if exc is None:
                             pass
                         else:
-                            raise exc
+                            raise exc from None
                     else:
                         raise
             else:
@@ -461,7 +461,7 @@ class GenericStore(StoreBase):
             raise
         except Exception as e:
             if top_call and not self.verbose:
-                raise _stack.exception(e)
+                raise _stack.exception(e) from None
             else:
                 raise
 
@@ -525,8 +525,8 @@ def poke(exposes):
             sub_container = store.newContainer(objname, obj, container)
         except (SystemExit, KeyboardInterrupt):
             raise
-        except:
-            raise ValueError('generic poke not supported by store')
+        #except:
+        #    raise ValueError('generic poke not supported by store')# from None
         #_stack = _add_to_stack(_stack, objname)
         for iobjname in exposes:
             if isinstance(iobjname, (tuple, list)):
@@ -551,7 +551,7 @@ def poke_assoc(store, objname, assoc, container, visited=None, _stack=None):
     except (SystemExit, KeyboardInterrupt):
         raise
     except:
-        raise ValueError('generic poke not supported by store')
+        raise ValueError('generic poke not supported by store')# from None
     escape_keys = assoc and not all(isinstance(iobjname, strtypes) for iobjname,_ in assoc)
     reported_item_counter = 0
     escaped_key_counter = 0
