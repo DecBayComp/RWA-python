@@ -9,7 +9,7 @@ elif [ -d "tests" ]; then
     container="$(pwd)/containers/rwa-openmpi-dev.sif"
     cd tests
 else
-    echo "Please run $0 if the tests directory"
+    echo "Please run $0 in the tests directory"
     exit 1
 fi
 
