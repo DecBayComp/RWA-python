@@ -1,13 +1,12 @@
-{% set name = "rwa-python" %}
 {% set version = "0.8.5" %}
 
 package:
-  name: {{ name|lower }}
+  name: rwa-python
   version: {{ version }}
 
 source:
-  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: 527afb1be34a6de13f42b96c7edb916a3b92aa8d618a634caf80155f85393d19
+  url: https://github.com/DecBayComp/RWA-python/archive/v{{ version }}.tar.gz
+  sha256: 9bcc928ccfb22d1353d59a95c98062ef2b6543c56044ee92cf52ded32cb6d262
 
 build:
   #noarch: python
