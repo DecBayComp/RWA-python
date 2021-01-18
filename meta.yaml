@@ -1,0 +1,59 @@
+{% set name = "rwa-python" %}
+{% set version = "0.8.5" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: 527afb1be34a6de13f42b96c7edb916a3b92aa8d618a634caf80155f85393d19
+
+build:
+  #noarch: python
+  number: 0
+  script: "{{ PYTHON }} -m pip install ."
+
+requirements:
+  host:
+    - h5py
+    - numpy
+    - pandas
+    - pip
+    - python
+    - scipy
+    - six
+  run:
+    - hdf5
+    - h5py
+    - numpy
+    - pandas
+    - python
+    - scipy
+    - six
+
+test:
+  imports:
+    - rwa
+  commands:
+    - pytest
+  #  - tests/multi-py_compat.sh # [not win]
+  requires:
+    - pytest
+  #  - singularity
+  files:
+    - tests
+  #  - containers
+
+about:
+  home: https://github.com/DecBayComp/RWA-python
+  license: Apache-2.0
+  license_family: APACHE
+  license_file: LICENSE
+  summary: "HDF5-based serialization library for Python datatypes"
+  doc_url: https://rwa-python.readthedocs.io/
+
+extra:
+  recipe-maintainers:
+    - DecBayComp
+
