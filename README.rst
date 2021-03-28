@@ -1,3 +1,6 @@
+[![docs](https://img.shields.io/badge/docs-latest-blue.svg)](https://tramway.readthedocs.io/en/latest/)
+[![CI](https://github.com/DecBayComp/TRamWAy/workflows/CI/badge.svg)](https://github.com/DecBayComp/TRamWAy/actions?query=workflow%3ACI)
+[![codecov](https://codecov.io/gh/DecBayComp/TRamWAy/branch/master/graph/badge.svg)](https://codecov.io/gh/DecBayComp/TRamWAy)
 
 RWA-python
 ==========
