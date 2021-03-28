@@ -330,7 +330,9 @@ class HDF5Store(FileStore):
         except IOError as e:
             if e.args[0].startswith('Unable to '):
                 try:
-                    raise FileNotFoundError(resource) from None
+                    e_new = FileNotFoundError(resource)
+                    e_new.__cause__ = None
+                    raise e_new
                 except NameError:
                     raise OSError('file not found: {}'.format(resource)) from None
 

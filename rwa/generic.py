@@ -367,7 +367,9 @@ class GenericStore(StoreBase):
             raise
         except Exception as e:
             if top_call and not self.verbose:
-                raise _stack.exception(e) from None
+                new_e = _stack.exception(e)
+                new_e.__cause__ = None
+                raise new_e
             else:
                 raise
 
