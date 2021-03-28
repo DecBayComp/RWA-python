@@ -331,10 +331,10 @@ class HDF5Store(FileStore):
             if e.args[0].startswith('Unable to '):
                 try:
                     e_new = FileNotFoundError(resource)
-                    e_new.__cause__ = None
-                    raise e_new
                 except NameError:
-                    raise OSError('file not found: {}'.format(resource)) from None
+                    e_new = OSError('file not found: {}'.format(resource))
+                e_new.__cause__ = None
+                raise e_new
 
     # backward compatibility property
     @property
