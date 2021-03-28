@@ -437,7 +437,8 @@ class GenericStore(StoreBase):
                         if exc is None:
                             pass
                         else:
-                            raise exc from None
+                            exc.__cause__ = None
+                            raise exc
                 try:
                     obj = self.peekStorable(storable, record, _stack=_stack, **kwargs)
                 except (SystemExit, KeyboardInterrupt):
@@ -448,7 +449,8 @@ class GenericStore(StoreBase):
                         if exc is None:
                             pass
                         else:
-                            raise exc from None
+                            exc.__cause__ = None
+                            raise exc
                     else:
                         raise
             else:
@@ -463,7 +465,9 @@ class GenericStore(StoreBase):
             raise
         except Exception as e:
             if top_call and not self.verbose:
-                raise _stack.exception(e) from None
+                e_new = _stack.exception(e)
+                e_new.__cause__ = None
+                raise e_new
             else:
                 raise
 
@@ -580,7 +584,8 @@ def poke_assoc(store, objname, assoc, container, visited=None, _stack=None):
         if e.args[0].startswith(msg):
             raise
         else:
-            raise TypeError("{}:\n\t{}".format(msg, e.args[0]))
+            e_new = TypeError("{}:\n\t{}".format(msg, e.args[0]))
+            raise e_new
 
 
 # peeks
