@@ -125,9 +125,8 @@ else:
             else:
                 #attrs['names'] = [ _unicode(_name) for _name in names ]
                 attrs['names'] = _map(_unicode, names)
-        if sys.version_info >= (3,6):
-            old2new = dict(levels='codes', labels='levels')
-            attrs = { old2new.get(k, k): attrs[k] for k in attrs }
+        old2new = dict(levels='codes', labels='levels')
+        attrs = { old2new.get(k, k): attrs[k] for k in attrs }
         return pandas.MultiIndex(**attrs)
 
     #poke_multiindex = poke(['levels', 'labels', 'names'])
