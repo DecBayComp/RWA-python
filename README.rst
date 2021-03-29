@@ -1,6 +1,9 @@
-[![docs](https://img.shields.io/badge/docs-latest-blue.svg)](https://tramway.readthedocs.io/en/latest/)
-[![CI](https://github.com/DecBayComp/TRamWAy/workflows/CI/badge.svg)](https://github.com/DecBayComp/TRamWAy/actions?query=workflow%3ACI)
-[![codecov](https://codecov.io/gh/DecBayComp/TRamWAy/branch/master/graph/badge.svg)](https://codecov.io/gh/DecBayComp/TRamWAy)
+.. image:: https://img.shields.io/badge/docs-latest-blue.svg
+   :target: https://rwa-python.readthedocs.io/en/latest/
+.. image:: https://github.com/DecBayComp/RWA-python/workflows/CI/badge.svg
+   :target: https://github.com/DecBayComp/RWA-python/actions?query=workflow%3ACI
+.. image:: https://codecov.io/gh/DecBayComp/RWA-python/branch/master/graph/badge.svg
+   :target: https://codecov.io/gh/DecBayComp/RWA-python
 
 RWA-python
 ==========
