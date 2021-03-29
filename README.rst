@@ -1,7 +1,7 @@
 .. image:: https://img.shields.io/badge/docs-latest-blue.svg
    :target: https://rwa-python.readthedocs.io/en/latest/
 .. image:: https://github.com/DecBayComp/RWA-python/workflows/CI/badge.svg
-   :target: https://github.com/DecBayComp/RWA-python/actions?query=workflow%3ACI
+   :target: https://github.com/DecBayComp/RWA-python/actions?query=workflows%3Aci
 .. image:: https://codecov.io/gh/DecBayComp/RWA-python/branch/master/graph/badge.svg
    :target: https://codecov.io/gh/DecBayComp/RWA-python
 
