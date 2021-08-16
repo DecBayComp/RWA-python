@@ -845,7 +845,16 @@ expose_extensions.append(namedtuple_exposes)
 
 
 class AutoSerialFailure(NotImplementedError):
-    pass
+    def __init__(self, msg=None, typ=None):
+        self.msg = msg
+        self.typ = typ
+    def __repr__(self):
+        if self.typ:
+            return ' '.join((self.msg, repr(self.typ)))
+        else:
+            return self.msg
+    def __str__(self):
+        return repr(self)
 
 
 def default_storable(python_type, exposes=None, version=None, storable_type=None, peek=default_peek):
@@ -881,7 +890,7 @@ def default_storable(python_type, exposes=None, version=None, storable_type=None
                 if exposes:
                     break
         if not exposes:
-            raise AutoSerialFailure('`exposes` required for type: {!r}'.format(python_type))
+            raise AutoSerialFailure('`exposes` required for type:', python_type)
     return Storable(python_type, key=storable_type, \
         handlers=StorableHandler(version=version, exposes=exposes, \
         poke=poke(exposes), peek=peek(python_type, exposes)))

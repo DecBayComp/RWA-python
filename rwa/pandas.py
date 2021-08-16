@@ -293,7 +293,11 @@ else:
         import string
         for extra in df.__dict__:
             if extra[0] in string.ascii_lowercase:
-                service.poke(extra, df.__dict__[extra], container, *args, **kwargs)
+                try:
+                    service.poke(extra, df.__dict__[extra], container, *args, **kwargs)
+                except AutoSerialFailure as e:
+                    import logging
+                    logging.getLogger().warning(str(e))
 
     _peek_dataframe = peek(pandas.DataFrame, ['data', 'index'])
     def peek_dataframe(service, container, _stack=None, force_unicode=None):
