@@ -1,6 +1,6 @@
 #!/bin/sh
 
-versions="2.7 3.5 3.6 3.7 3.8 3.9"
+versions="2.7 3.5 3.6 3.7 3.8 3.9 3.10"
 #versions="3.6 2.7"
 
 if [ "$(pwd | rev | cut -d/ -f1 | rev)" = "tests" ]; then
@@ -14,11 +14,11 @@ else
 fi
 
 
-if ! [ -f "$container" ]; then
+if ! [ -f "$container" -o -h "$container" ]; then
     cd ../containers # if this crashes, $0 is not run from the tests directory as it should be
     echo "No container found; building one..."
-    echo "sudo singularity build rwa-openmpi-dev.sif rwa-openmpi-dev"
-    sudo singularity build rwa-openmpi-dev.sif rwa-openmpi-dev || exit
+    echo "singularity build --fakeroot rwa-openmpi-dev.sif rwa-openmpi-dev"
+    singularity build --fakeroot rwa-openmpi-dev.sif rwa-openmpi-dev || exit
     echo "======================================"
     echo "Container ready; starting the tests..."
     echo "======================================"
@@ -63,7 +63,7 @@ EOT
 
 for poke_version in $versions; do
 
-poke_python="singularity run $container -$(echo $poke_version | cut -c1,3)"
+poke_python="singularity run $container -$(echo $poke_version | cut -c1,3-)"
 
 for peek_version in $versions; do
 
@@ -71,7 +71,7 @@ if [ "$poke_version" = "$peek_version" ]; then
     continue
 fi
 
-peek_python="singularity run $container -$(echo $peek_version | cut -c1,3)"
+peek_python="singularity run $container -$(echo $peek_version | cut -c1,3-)"
 
 echo "----\n${poke_version}->${peek_version}\n----"
 

@@ -64,15 +64,20 @@ In addition, string typing is sometimes problematic. Non-ascii characters should
 Installation
 ------------
 
-Python >= 2.7 or >= 3.5 is required.
+Python >= 3.5 is required. **RWA-python** may still work with Python 2.7 but support has been dropped.
 
-*pip* should work just fine:
+Windows users should favor Conda for installing **RWA-python**, as Conda will seamlessly install the HDF5 standard library which is a required dependency.
 
-::
+For other users, *pip* should work just fine::
 
 	pip install --user rwa-python
 
-*pip install* will install some Python dependencies if missing, but you may still need to install the `HDF5 reference library <https://support.hdfgroup.org/downloads/index.html>`_.
+*pip install* will install some Python dependencies if missing, but you may still need to install the `HDF5 reference library <https://tramway.readthedocs.io/en/latest/libhdf5.html>`_.
+Note that most package managers include this library.
+
+The **RWA-python** package can also be installed using Conda::
+
+        conda install rwa-python -c conda-forge
 
 
 See also

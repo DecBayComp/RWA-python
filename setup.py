@@ -24,7 +24,7 @@ except OSError:
 
 setup(
     name = 'rwa-python',
-    version = '0.8.6',
+    version = '0.9.0',
     description = 'HDF5-based serialization library for Python datatypes',
     long_description = long_description,
     url = 'https://github.com/DecBayComp/RWA-python',
@@ -36,11 +36,12 @@ setup(
         #'Programming Language :: Python :: 2',
         #'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        #'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
     ],
     packages = ['rwa'],
     install_requires = install_requires,

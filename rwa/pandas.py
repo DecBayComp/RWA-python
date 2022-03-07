@@ -8,6 +8,8 @@ import sys
 class Python35Warning(DeprecationWarning):
     pass
 
+warnings.filterwarnings("ignore", category=FutureWarning, module="rwa.pandas")
+
 
 try:
     import pandas

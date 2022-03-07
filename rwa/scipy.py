@@ -5,6 +5,15 @@ from .generic import *
 
 
 class ScipyStorable(Storable):
+    def __init__(self, python_type, key=None, handlers=[]):
+        if key is None:
+            path = python_type.__module__
+            parts = path.split('.')
+            if parts[-1].startswith('_'):
+                parts[-1] = parts[-1][1:]
+                key = '.'.join(["Python"] + parts + [python_type.__name__])
+        return Storable.__init__(self, python_type, key, handlers)
+
     @property
     def default_version(self):
         if six.PY2:
