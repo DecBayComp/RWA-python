@@ -227,7 +227,7 @@ class Storable(object):
         return self.asVersion(kwargs.pop('version', None)).peek(*args, **kwargs)
 
 
-def format_type(python_type, agnostic=False):
+def format_type(python_type, agnostic=False, deprivatize=False):
     module = python_type.__module__
     name = python_type.__name__
     if module in ['__builtin__', 'builtins']:
@@ -235,6 +235,9 @@ def format_type(python_type, agnostic=False):
     elif module.endswith(name):
         storable_type = module
     else:
+        if deprivatize:
+            parts = [(part[1:] if part[0]=='_' and part[1]!='_' else part) for part in module.split('.')]
+            module = '.'.join(parts)
         storable_type = module + '.' + name
     if not agnostic:
         storable_type = 'Python.' + storable_type
@@ -262,12 +265,17 @@ class StorableService(object):
         self.by_storable_type = {}
         self.params = params
 
-    def registerStorable(self, storable, replace=False, agnostic=False):
+    def registerStorable(self, storable, replace=False, agnostic=False, deprivatize=None):
         # check for compliance and fill in missing fields if possible
         if not all([ isinstance(h.version, tuple) for h in storable.handlers ]):
             raise TypeError("`Storable`'s version should be a tuple of numerical scalars")
         if storable.storable_type is None:
-            storable.storable_type = format_type(storable.python_type, agnostic)
+            if deprivatize is None:
+                try:
+                    deprivatize = storable.deprivatize
+                except AttributeError:
+                    deprivatize = False
+            storable.storable_type = format_type(storable.python_type, agnostic, deprivatize)
         if not storable.handlers:
             raise ValueError('missing handlers', storable.storable_type)
         pokes = not all( h.poke is None for h in storable.handlers ) # not peek-only

@@ -6,14 +6,10 @@ from .generic import *
 
 class ScipyStorable(Storable):
     def __init__(self, python_type, key=None, handlers=[]):
-        if key is None:
-            path = python_type.__module__
-            parts = path.split('.')
-            if parts[-1].startswith('_'):
-                parts[-1] = parts[-1][1:]
-                key = '.'.join(["Python"] + parts + [python_type.__name__])
-        return Storable.__init__(self, python_type, key, handlers)
+        Storable.__init__(self, python_type, key, handlers)
+        self.deprivatize = True
 
+class ScipySpatialStorable(ScipyStorable):
     @property
     def default_version(self):
         if six.PY2:
@@ -43,6 +39,14 @@ else:
 
     csr_exposes = ['shape', 'data', 'indices', 'indptr']
     def mk_csr(shape, data, indices, indptr):
+        if any(s < 0 for s in shape):
+            warnings.warn("corrupted shape: {}".format(shape))
+            warnings.warn("data corruption is known to happen on newly created files and a known fix consists in restarting the Python interpreter session")
+            return None
+        if indptr[0] != 0:
+            warnings.warn("corrupted first pointer (should be 0): {}".format(indptr[0]))
+            warnings.warn("data corruption is known to happen on newly created files and a known fix consists in restarting the Python interpreter session")
+            return None
         return csr_matrix((data, indices, indptr), shape=shape)
     csr_handler = handler(mk_csr, csr_exposes)
 
@@ -74,13 +78,13 @@ else:
     lil_handler = StorableHandler(poke=lil_poke, peek=lil_peek)
 
 
-    sparse_storables = [Storable(bsr_matrix, handlers=bsr_handler), \
-        Storable(coo_matrix, handlers=coo_handler), \
-        Storable(csc_matrix, handlers=csc_handler), \
-        Storable(csr_matrix, handlers=csr_handler), \
-        Storable(dia_matrix, handlers=dia_handler), \
-        Storable(dok_matrix, handlers=dok_handler), \
-        Storable(lil_matrix, handlers=lil_handler)]
+    sparse_storables = [ScipyStorable(bsr_matrix, handlers=bsr_handler), \
+        ScipyStorable(coo_matrix, handlers=coo_handler), \
+        ScipyStorable(csc_matrix, handlers=csc_handler), \
+        ScipyStorable(csr_matrix, handlers=csr_handler), \
+        ScipyStorable(dia_matrix, handlers=dia_handler), \
+        ScipyStorable(dok_matrix, handlers=dok_handler), \
+        ScipyStorable(lil_matrix, handlers=lil_handler)]
 
 
 spatial_storables = []
@@ -148,7 +152,7 @@ else:
             handlers.append(auto.handlers[0])
         elif six.PY2 and v1_exposes:
             handlers.append(handler(_init(v1_exposes), v1_exposes, version=(1,)))
-        return ScipyStorable(_type, handlers=handlers)
+        return ScipySpatialStorable(_type, handlers=handlers)
 
     spatial_storables += \
         [ scipy_spatial_storable(*_specs) for _specs in _scipy_spatial_types ]

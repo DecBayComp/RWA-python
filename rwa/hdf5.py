@@ -69,7 +69,16 @@ def binary_peek(service, container, *args, **kargs):
     return container[...].tobytes()
 
 def text_peek(service, container, *args, **kargs):
-    return container[...].tobytes().decode('utf-8')
+    text = container[...].tobytes()
+    try:
+        return text.decode('utf-8')
+    except UnicodeDecodeError:
+        # datetime object?
+        # https://bugs.python.org/issue22005
+        warnings.warn(str(text), UnicodeWarning)
+        warnings.warn("unicode decode errors are known to happen on newly created files and a known fix consists in restarting the Python interpreter session")
+        # data loss:
+        return None
 
 
 def mk_vlen_poke(f):
@@ -328,7 +337,7 @@ class HDF5Store(FileStore):
         try:
             return h5py.File(resource, mode, **kwargs)
         except IOError as e:
-            if e.args[0].startswith('Unable to '):
+            if e.args[0] == 11 or (isinstance(e.args, str) and e.args[0].startswith('Unable to ')):
                 try:
                     e_new = FileNotFoundError(resource)
                 except NameError:

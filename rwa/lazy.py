@@ -255,15 +255,16 @@ class FileStore(LazyStore):
     def close(self):
         LazyStore.close(self)
         if self.temporary:
-            if self.sane:
-                shutil.move(self.temporary, self.resource)
-            else:
-                try:
-                    os.unlink(self.temporary)
-                except (SystemExit, KeyboardInterrupt):
-                    raise
-                except:
-                    pass
+            if os.path.isfile(self.temporary):
+                if self.sane:
+                    shutil.move(self.temporary, self.resource)
+                else:
+                    try:
+                        os.unlink(self.temporary)
+                    except (SystemExit, KeyboardInterrupt):
+                        raise
+                    except:
+                        pass
             self.temporary = None
 
     def __del__(self):
