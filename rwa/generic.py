@@ -722,7 +722,7 @@ def peek_with_kwargs(init, args=[], permissive=False):
 peek_as_dict = peek_with_kwargs(dict)
 
 
-def peek(init, exposes, debug=False):
+def peek(init, exposes, debug=False, excess_records=[]):
     """
     Default deserializer factory.
 
@@ -731,6 +731,9 @@ def peek(init, exposes, debug=False):
         init (callable): type constructor.
 
         exposes (iterable): attributes to be peeked and passed to `init`.
+
+        excess_records (iterable): attributes known to be poked by some other
+            versions of the corresponding library.
 
     Returns:
 
@@ -745,7 +748,11 @@ def peek(init, exposes, debug=False):
         for i in store.iterObjectNames(container):
             objname = store.strRecord(i, container)
             if objname not in exposes:
-                setattr(obj, objname, store.peek(objname, container, _stack=_stack))
+                try:
+                    setattr(obj, objname, store.peek(objname, container, _stack=_stack))
+                except AttributeError:
+                    if objname not in excess_records:
+                        rethrow()
         return obj
     return _peek
 
@@ -1072,7 +1079,7 @@ type_storable = Storable(type, handlers=StorableHandler(
             poke=poke_native(format_type)))
 
 
-def handler(init, exposes, version=None):
+def handler(init, exposes, version=None, excess_records=[]):
     """
     Simple handler with default `peek` and `poke` procedures.
 
@@ -1088,7 +1095,10 @@ def handler(init, exposes, version=None):
 
         StorableHandler: storable handler.
     """
-    return StorableHandler(poke=poke(exposes), peek=peek(init, exposes), version=version)
+    return StorableHandler(poke=poke(exposes),
+                           peek=peek(init, exposes,
+                                     excess_records=excess_records),
+                           version=version)
 
 
 def namedtuple_storable(namedtuple, *args, **kwargs):

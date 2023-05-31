@@ -87,12 +87,11 @@ The container OS is Ubuntu Focal and can run on top of old OSes like CentOS6.
     export LC_ALL=C
     for version in 2.7 3.5 3.6 3.7 3.8 3.9 3.10 3.11; do
         python="python${version}"
-        pip_install="$python -m pip install -U"
+        pip="$python -m pip"
+        pip_install="$pip install -U"
         if [ "$version" = "3.6" -o "$version" = "3.7" -o "$version" = "3.8" -o "$version" = "3.9" -o "$version" = "3.10" -o "$version" = "3.11" ]; then
             $pip_install --force-reinstall setuptools
             $pip_install pytest
-        else
-            : #$pip install --upgrade pip
         fi
         if [ "$version" = "3.8" -o "$version" = "3.9" -o "$version" = "3.10" -o "$version" = "3.11" ]; then
             $pip_install mpi4py

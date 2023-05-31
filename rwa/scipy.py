@@ -148,7 +148,7 @@ else:
                     struct = _fallback(*args)
                 return struct
             return __init
-        handlers = [handler(_init(exposes), exposes, version=(0,))] # Py2
+        handlers = [handler(_init(exposes), exposes, version=(0,), excess_records=check)] # Py2
         if six.PY3:
             auto = default_storable(_type)
             assert not auto.handlers[1:]

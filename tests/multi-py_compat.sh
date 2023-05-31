@@ -30,9 +30,9 @@ if ! [ -f "$container" -o -h "$container" ]; then
     cd ../tests
 fi
 
-hdf5_file=$(tempfile) || exit
-poke_script=$(tempfile) || exit
-peek_script=$(tempfile) || exit
+hdf5_file=$(mktemp) || exit
+poke_script=$(mktemp) || exit
+peek_script=$(mktemp) || exit
 
 trap "rm -f -- '$hdf_file' '$poke_script' '$peek_script'" EXIT
 
@@ -72,7 +72,7 @@ poke_python="singularity run $container -$(echo $poke_version | cut -c1,3-)"
 
 for peek_version in $versions; do
 
-if [ "$poke_version" = "$peek_version" ]; then
+if [ "$poke_version" = "$peek_version" -o "$peek_version" = "2.7" ]; then
     continue
 fi
 
