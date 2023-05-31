@@ -1,6 +1,6 @@
 #!/bin/sh
 
-versions="2.7 3.5 3.6 3.7 3.8 3.9 3.10"
+versions="2.7 3.5 3.6 3.7 3.8 3.9 3.10 3.11"
 #versions="3.6 2.7"
 
 if [ "$(pwd | rev | cut -d/ -f1 | rev)" = "tests" ]; then
@@ -17,8 +17,13 @@ fi
 if ! [ -f "$container" -o -h "$container" ]; then
     cd ../containers # if this crashes, $0 is not run from the tests directory as it should be
     echo "No container found; building one..."
+    if apptainer --version &> /dev/null; then
+    echo "apptainer build rwa-openmpi-dev.sif rwa-jammy"
+    apptainer build rwa-openmpi-dev.sif rwa-jammy || exit
+    else
     echo "singularity build --fakeroot rwa-openmpi-dev.sif rwa-openmpi-dev"
     singularity build --fakeroot rwa-openmpi-dev.sif rwa-openmpi-dev || exit
+    fi
     echo "======================================"
     echo "Container ready; starting the tests..."
     echo "======================================"

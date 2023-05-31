@@ -11,6 +11,19 @@ import os.path
 import numpy as np
 from scipy import sparse, spatial
 
+try:
+    ConvexHull = spatial.ConvexHull
+except AttributeError:
+    ConvexHull = spatial.qhull.ConvexHull
+try:
+    Delaunay = spatial.Delaunay
+except AttributeError:
+    Delaunay = spatial.qhull.Delaunay
+try:
+    Voronoi = spatial.Voronoi
+except AttributeError:
+    Voronoi = spatial.qhull.Voronoi
+
 
 class TestSciPyTypes(object):
 
@@ -52,11 +65,11 @@ class TestSciPyTypes(object):
     def test_spatial_types(self, tmpdir):
         test_file = os.path.join(tmpdir.strpath, 'test.h5')
         # test values
-        data = {'convexhull': spatial.qhull.ConvexHull(np.random.rand(5,2)),
-            'convexhull_with_options': spatial.qhull.ConvexHull(np.random.rand(5,2), qhull_options='QbB'),
-            'delaunay': spatial.qhull.Delaunay(np.random.rand(5,2)),
-            'voronoi': spatial.qhull.Voronoi(np.random.rand(5,2)),
-            'voronoi_with_options': spatial.qhull.Voronoi(np.random.rand(5,2), True, qhull_options='Qbb Qz'),
+        data = {'convexhull': ConvexHull(np.random.rand(5,2)),
+            'convexhull_with_options': ConvexHull(np.random.rand(5,2), qhull_options='QbB'),
+            'delaunay': Delaunay(np.random.rand(5,2)),
+            'voronoi': Voronoi(np.random.rand(5,2)),
+            'voronoi_with_options': Voronoi(np.random.rand(5,2), True, qhull_options='Qbb Qz'),
                }
         #
         check = [('vertices', True),

@@ -104,13 +104,17 @@ else:
     Voronoi_v1_exposes = [ '_points', 'max_bound', 'min_bound', 'ndim', 'npoints', 'point_region', 'regions', 'ridge_points', 'ridge_vertices', 'vertices' ]
 
     _scipy_spatial_types = [
-        ('Delaunay', Delaunay_exposes, Delaunay_v1_exposes, ('simplices', )),
+        ('Delaunay', Delaunay_exposes, Delaunay_v1_exposes, ('vertices', 'simplices')),
         ('ConvexHull', ConvexHull_exposes, ConvexHull_v1_exposes, ('vertices', 'equations')),
         ('Voronoi', Voronoi_exposes, Voronoi_v1_exposes, ('regions', 'point_region'))]
 
     def scipy_spatial_storable(name, exposes, v1_exposes, check):
         _fallback = namedtuple(name, exposes)
-        _type = getattr(scipy.spatial.qhull, name)
+        try:
+            _type = getattr(scipy.spatial, name)
+        except AttributeError:
+            # deprecated location
+            _type = getattr(scipy.spatial.qhull, name)
         def _init(_exposes):
             def __init(*args):
                 #print(args) # debug
@@ -152,7 +156,9 @@ else:
             handlers.append(auto.handlers[0])
         elif six.PY2 and v1_exposes:
             handlers.append(handler(_init(v1_exposes), v1_exposes, version=(1,)))
-        return ScipySpatialStorable(_type, handlers=handlers)
+        return ScipySpatialStorable(_type,
+            key='Python.scipy.spatial.qhull.' + _type.__name__,
+            handlers=handlers)
 
     spatial_storables += \
         [ scipy_spatial_storable(*_specs) for _specs in _scipy_spatial_types ]

@@ -152,6 +152,20 @@ else:
         service.poke(attrname, attr, container, *args, **kwargs)
 
     try:
+        # Int64Index is missing in 2.0.2
+        pandas_Int64Index = pandas.Int64Index
+        peek_int64index = peek_numerical_index(pandas.Int64Index)
+    except AttributeError:
+        # convert Int64Index into Index
+        class pandas_Int64Index(object):
+            """
+            Placeholder type.
+            """
+            __slot__ = ()
+            pass
+        peek_int64index = peek_numerical_index(pandas.Index, lambda a: a.astype(np.int64))
+
+    try:
         # UInt64Index is missing in 0.17.1
         pandas_UInt64Index = pandas.UInt64Index
         peek_uint64index = peek_numerical_index(pandas.UInt64Index)
@@ -163,7 +177,21 @@ else:
             """
             __slot__ = ()
             pass
-        peek_uint64index = peek_numerical_index(pandas.Int64Index, lambda a: a.astype(np.int64))
+        peek_uint64index = peek_int64index
+
+    try:
+        # Float64Index is missing in 2.0.2
+        pandas_Float64Index = pandas.Float64Index
+        peek_float64index = peek_numerical_index(pandas.Float64Index)
+    except AttributeError:
+        # convert Float64Index into Index
+        class pandas_Float64Index(object):
+            """
+            Placeholder type.
+            """
+            __slot__ = ()
+            pass
+        peek_float64index = peek_numerical_index(pandas.Index, lambda a: a.astype(np.float64))
 
     if True:
         poke_rangeindex = poke([('start','_start'), ('stop','_stop'), ('step','_step'), 'name'])
@@ -209,19 +237,17 @@ else:
          key='Python.pandas.core.index.Index', \
          handlers=StorableHandler(poke=poke_index, peek=peek_index, \
             peek_option='pandas.index.force_unicode')), \
-        Storable(pandas.Int64Index, \
+        Storable(pandas_Int64Index, \
          key='Python.pandas.core.index.Int64Index', \
-         handlers=StorableHandler(poke=poke_index, \
-            peek=peek_numerical_index(pandas.Int64Index), \
+         handlers=StorableHandler(poke=poke_index, peek=peek_int64index, \
             peek_option='pandas.index.force_unicode')), \
         Storable(pandas_UInt64Index, \
          key='Python.pandas.core.index.UInt64Index', \
          handlers=StorableHandler(poke=poke_index, peek=peek_uint64index, \
             peek_option='pandas.index.force_unicode')), \
-        Storable(pandas.Float64Index, \
+        Storable(pandas_Float64Index, \
          key='Python.pandas.core.index.Float64Index', \
-         handlers=StorableHandler(poke=poke_index, \
-            peek=peek_numerical_index(pandas.Float64Index), \
+         handlers=StorableHandler(poke=poke_index, peek=peek_float64index, \
             peek_option='pandas.index.force_unicode')), \
         Storable(pandas_RangeIndex, \
          key='Python.pandas.core.index.RangeIndex', \

@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: ubuntu:focal
+From: ubuntu:22.04
 
 %help
 RWA-python is available in multiple Python environments:
@@ -7,9 +7,9 @@ RWA-python is available in multiple Python environments:
     python3.5
     python3.6
     python3.7
-    python3.8 (alias python3)
+    python3.8
     python3.9
-    python3.10
+    python3.10 (alias python3)
     python3.11
 The container OS is Ubuntu Focal and can run on top of old OSes like CentOS6.
 
