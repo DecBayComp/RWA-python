@@ -7,16 +7,28 @@ Test serialization to HDF5 of pandas types.
 from rwa.generic import *
 from rwa.hdf5 import HDF5Store
 
-import os.path
+import os
 import numpy as np
-from pandas import Index, Int64Index, Float64Index, MultiIndex, Series, DataFrame, \
-        Categorical, CategoricalIndex
+from pandas import Index, MultiIndex, Series, DataFrame, Categorical, \
+    CategoricalIndex
 try:
     from pandas import UInt64Index
 except ImportError:
     _test_uint64index = False
 else:
     _test_uint64index = True
+try:
+    from pandas import Int64Index
+except ImportError:
+    _test_int64index = False
+else:
+    _test_int64index = True
+try:
+    from pandas import Float64Index
+except ImportError:
+    _test_float64index = False
+else:
+    _test_float64index = True
 try:
     from pandas import RangeIndex
 except ImportError:
@@ -47,11 +59,13 @@ class TestPandasTypes(object):
         # test values
         array = np.r_[np.arange(1,4), 5, np.arange(7,10)]
         data = {'index0': Index(array, name=b'i0'),
-            'index1': Index(list(b'abde')),
-            'int64index': Int64Index(array.astype(np.int64), name=b'i64'),
-            'float64index': Float64Index(array.astype(np.float64))}
+            'index1': Index(list(b'abde'))}
         if _test_uint64index:
             data['uint64index'] = UInt64Index(array.astype(np.uint64))
+        if _test_int64index:
+            data['int64index'] = Int64Index(array.astype(np.int64), name=b'i64')
+        if _test_float64index:
+            data['float64index'] = Float64Index(array.astype(np.float64))
         #
         # write
         store = HDF5Store(test_file, 'w')
@@ -67,7 +81,8 @@ class TestPandasTypes(object):
                 print(t)
                 val = store.peek(t)
                 assert type(val) is type(data[t])
-                assert val.dtype == data[t].dtype
+                if os.name != 'nt':
+                    assert val.dtype == data[t].dtype
                 assert np.all(val.values == data[t].values)
                 assert val.name == as_unicode(data[t].name)
         finally:
@@ -92,9 +107,14 @@ class TestPandasTypes(object):
         try:
             val = store.peek(t)
             assert type(val) is type(data)
-            assert val._start == data._start
-            assert val._stop == data._stop
-            assert val._step == data._step
+            if hasattr(val, '_start'):
+                assert val._start == data._start
+                assert val._stop == data._stop
+                assert val._step == data._step
+            else:
+                assert val.start == data.start
+                assert val.stop == data.stop
+                assert val.step == data.step
             assert val.name == as_unicode(data.name)
         finally:
             store.close()

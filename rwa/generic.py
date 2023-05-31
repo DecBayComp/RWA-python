@@ -589,7 +589,7 @@ def poke_assoc(store, objname, assoc, container, visited=None, _stack=None):
 
 
 # peeks
-def default_peek(python_type, exposes):
+def default_peek(python_type, exposes, excess_attributes=[]):
     """
     Autoserializer factory.
 
@@ -600,6 +600,9 @@ def default_peek(python_type, exposes):
         python_type (type): type constructor.
 
         exposes (iterable): sequence of attributes.
+
+        excess_attributes (iterable): set of unrequired attributes that might
+            have been serialized by other versions of the provider library.
 
     Returns:
 
@@ -641,7 +644,9 @@ def default_peek(python_type, exposes):
                 try:
                     setattr(obj, attr, val)
                 except AttributeError:
-                    raise missing(attr)
+                    if attr not in excess_attributes:
+                        print(excess_attributes)
+                        raise missing(attr)
             return obj
     else:
         def peek(store, container, _stack=None):
@@ -655,7 +660,8 @@ def default_peek(python_type, exposes):
                 try:
                     setattr(obj, attr, val)
                 except AttributeError:
-                    raise missing(attr)
+                    if attr not in excess_attributes:
+                        raise missing(attr)
             return obj
     return peek
 

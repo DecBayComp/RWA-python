@@ -1,6 +1,6 @@
 #!/bin/sh
 
-versions="2.7 3.5 3.6 3.7 3.8 3.9 3.10"
+versions="3.5 3.6 3.7 3.8 3.9 3.10 3.11"
 #versions="3.6 2.7"
 
 if [ "$(pwd | rev | cut -d/ -f1 | rev)" = "tests" ]; then
@@ -17,17 +17,22 @@ fi
 if ! [ -f "$container" -o -h "$container" ]; then
     cd ../containers # if this crashes, $0 is not run from the tests directory as it should be
     echo "No container found; building one..."
-    echo "singularity build --fakeroot rwa-openmpi-dev.sif rwa-openmpi-dev"
-    singularity build --fakeroot rwa-openmpi-dev.sif rwa-openmpi-dev || exit
+    if [ -z "$(which apptainer)" ]; then
+    echo "singularity build --fakeroot rwa-openmpi-dev.sif rwa-focal"
+    singularity build --fakeroot rwa-openmpi-dev.sif rwa-focal || exit
+    else
+    echo "apptainer build rwa-openmpi-dev.sif rwa-jammy"
+    apptainer build rwa-openmpi-dev.sif rwa-jammy || exit
+    fi
     echo "======================================"
     echo "Container ready; starting the tests..."
     echo "======================================"
     cd ../tests
 fi
 
-hdf5_file=$(tempfile) || exit
-poke_script=$(tempfile) || exit
-peek_script=$(tempfile) || exit
+hdf5_file=$(mktemp) || exit
+poke_script=$(mktemp) || exit
+peek_script=$(mktemp) || exit
 
 trap "rm -f -- '$hdf_file' '$poke_script' '$peek_script'" EXIT
 
