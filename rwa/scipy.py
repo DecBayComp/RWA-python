@@ -104,7 +104,7 @@ else:
     Voronoi_v1_exposes = [ '_points', 'max_bound', 'min_bound', 'ndim', 'npoints', 'point_region', 'regions', 'ridge_points', 'ridge_vertices', 'vertices' ]
 
     _scipy_spatial_types = [
-        ('Delaunay', Delaunay_exposes, Delaunay_v1_exposes, ('simplices', )),
+        ('Delaunay', Delaunay_exposes, Delaunay_v1_exposes, ('vertices', 'simplices')),
         ('ConvexHull', ConvexHull_exposes, ConvexHull_v1_exposes, ('vertices', 'equations')),
         ('Voronoi', Voronoi_exposes, Voronoi_v1_exposes, ('regions', 'point_region'))]
 
@@ -148,9 +148,10 @@ else:
                     struct = _fallback(*args)
                 return struct
             return __init
-        handlers = [handler(_init(exposes), exposes, version=(0,), excess_records=check)] # Py2
+        handlers = [handler(_init(exposes), exposes, version=(0,))] # Py2
         if six.PY3:
-            auto = default_storable(_type)
+            spatial_peek = lambda _, exposes: default_peek(_type, exposes, excess_attributes=check)
+            auto = default_storable(_type, peek=spatial_peek)
             assert not auto.handlers[1:]
             assert handlers[0].version[0] < auto.handlers[0].version[0]
             handlers.append(auto.handlers[0])

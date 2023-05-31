@@ -589,7 +589,7 @@ def poke_assoc(store, objname, assoc, container, visited=None, _stack=None):
 
 
 # peeks
-def default_peek(python_type, exposes):
+def default_peek(python_type, exposes, excess_attributes=[]):
     """
     Autoserializer factory.
 
@@ -600,6 +600,9 @@ def default_peek(python_type, exposes):
         python_type (type): type constructor.
 
         exposes (iterable): sequence of attributes.
+
+        excess_attributes (iterable): set of unrequired attributes that might
+            have been serialized by other versions of the provider library.
 
     Returns:
 
@@ -641,7 +644,9 @@ def default_peek(python_type, exposes):
                 try:
                     setattr(obj, attr, val)
                 except AttributeError:
-                    raise missing(attr)
+                    if attr not in excess_attributes:
+                        print(excess_attributes)
+                        raise missing(attr)
             return obj
     else:
         def peek(store, container, _stack=None):
@@ -655,7 +660,8 @@ def default_peek(python_type, exposes):
                 try:
                     setattr(obj, attr, val)
                 except AttributeError:
-                    raise missing(attr)
+                    if attr not in excess_attributes:
+                        raise missing(attr)
             return obj
     return peek
 
@@ -722,7 +728,7 @@ def peek_with_kwargs(init, args=[], permissive=False):
 peek_as_dict = peek_with_kwargs(dict)
 
 
-def peek(init, exposes, debug=False, excess_records=[]):
+def peek(init, exposes, debug=False):
     """
     Default deserializer factory.
 
@@ -731,9 +737,6 @@ def peek(init, exposes, debug=False, excess_records=[]):
         init (callable): type constructor.
 
         exposes (iterable): attributes to be peeked and passed to `init`.
-
-        excess_records (iterable): attributes known to be poked by some other
-            versions of the corresponding library.
 
     Returns:
 
@@ -748,11 +751,7 @@ def peek(init, exposes, debug=False, excess_records=[]):
         for i in store.iterObjectNames(container):
             objname = store.strRecord(i, container)
             if objname not in exposes:
-                try:
-                    setattr(obj, objname, store.peek(objname, container, _stack=_stack))
-                except AttributeError:
-                    if objname not in excess_records:
-                        rethrow()
+                setattr(obj, objname, store.peek(objname, container, _stack=_stack))
         return obj
     return _peek
 
@@ -1079,7 +1078,7 @@ type_storable = Storable(type, handlers=StorableHandler(
             poke=poke_native(format_type)))
 
 
-def handler(init, exposes, version=None, excess_records=[]):
+def handler(init, exposes, version=None):
     """
     Simple handler with default `peek` and `poke` procedures.
 
@@ -1095,10 +1094,7 @@ def handler(init, exposes, version=None, excess_records=[]):
 
         StorableHandler: storable handler.
     """
-    return StorableHandler(poke=poke(exposes),
-                           peek=peek(init, exposes,
-                                     excess_records=excess_records),
-                           version=version)
+    return StorableHandler(poke=poke(exposes), peek=peek(init, exposes), version=version)
 
 
 def namedtuple_storable(namedtuple, *args, **kwargs):

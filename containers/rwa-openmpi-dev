@@ -102,7 +102,7 @@ The container OS is Ubuntu Focal and can run on top of old OSes like CentOS6.
         $pip_install . -r requirements.txt
 
         for pkg in scipy pandas; do
-            if [ -z "$($pip show $pkg)" ]; then
+            if [ -z "$($pip show -q $pkg)" ]; then
                 $pip_install $pkg
             fi
         done

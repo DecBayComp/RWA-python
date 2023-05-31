@@ -1,6 +1,6 @@
 #!/bin/sh
 
-versions="2.7 3.5 3.6 3.7 3.8 3.9 3.10 3.11"
+versions="3.5 3.6 3.7 3.8 3.9 3.10 3.11"
 #versions="3.6 2.7"
 
 if [ "$(pwd | rev | cut -d/ -f1 | rev)" = "tests" ]; then
@@ -72,7 +72,7 @@ poke_python="singularity run $container -$(echo $poke_version | cut -c1,3-)"
 
 for peek_version in $versions; do
 
-if [ "$poke_version" = "$peek_version" -o "$peek_version" = "2.7" ]; then
+if [ "$poke_version" = "$peek_version" ]; then
     continue
 fi
 
