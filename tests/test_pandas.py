@@ -7,7 +7,7 @@ Test serialization to HDF5 of pandas types.
 from rwa.generic import *
 from rwa.hdf5 import HDF5Store
 
-import os.path
+import os
 import numpy as np
 from pandas import Index, MultiIndex, Series, DataFrame, Categorical, \
     CategoricalIndex
