@@ -46,7 +46,7 @@ When deserializing objects, it also looks for and loads the modules where the co
 If **RWA-python** complains about a type that cannot be serialized, a partial fix consists of ignoring this datatype:
 
 ```python
-	hdf5_not_storable(type(unserializable_object))
+hdf5_not_storable(type(unserializable_object))
 ```
 
 With Python2, the library requires explicit definitions in most cases.

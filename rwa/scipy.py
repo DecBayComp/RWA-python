@@ -104,7 +104,7 @@ else:
     Voronoi_v1_exposes = [ '_points', 'max_bound', 'min_bound', 'ndim', 'npoints', 'point_region', 'regions', 'ridge_points', 'ridge_vertices', 'vertices' ]
 
     _scipy_spatial_types = [
-        ('Delaunay', Delaunay_exposes, Delaunay_v1_exposes, ('vertices', 'simplices')),
+        ('Delaunay', Delaunay_exposes, Delaunay_v1_exposes, ('simplices', )),
         ('ConvexHull', ConvexHull_exposes, ConvexHull_v1_exposes, ('vertices', 'equations')),
         ('Voronoi', Voronoi_exposes, Voronoi_v1_exposes, ('regions', 'point_region'))]
 
@@ -157,7 +157,7 @@ else:
         elif six.PY2 and v1_exposes:
             handlers.append(handler(_init(v1_exposes), v1_exposes, version=(1,)))
         return ScipySpatialStorable(_type,
-            key='Python.scipy.spatial.qhull.' + _type.__name__,
+            key='Python.scipy.spatial._qhull.' + _type.__name__,
             handlers=handlers)
 
     spatial_storables += \
