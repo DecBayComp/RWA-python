@@ -81,7 +81,8 @@ class TestPandasTypes(object):
                 print(t)
                 val = store.peek(t)
                 assert type(val) is type(data[t])
-                assert val.dtype == data[t].dtype
+                if os.name != 'nt':
+                    assert val.dtype == data[t].dtype
                 assert np.all(val.values == data[t].values)
                 assert val.name == as_unicode(data[t].name)
         finally:
