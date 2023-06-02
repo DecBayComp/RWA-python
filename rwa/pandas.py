@@ -163,7 +163,7 @@ else:
             """
             __slot__ = ()
             pass
-        peek_int64index = peek_numerical_index(pandas.Index, lambda a: a.astype(np.int64))
+        peek_int64index = peek_numerical_index(pandas.Index, lambda a: np.asarray(a).astype(np.int64))
 
     try:
         # UInt64Index is missing in 0.17.1
@@ -191,7 +191,7 @@ else:
             """
             __slot__ = ()
             pass
-        peek_float64index = peek_numerical_index(pandas.Index, lambda a: a.astype(np.float64))
+        peek_float64index = peek_numerical_index(pandas.Index, lambda a: np.asarray(a).astype(np.float64))
 
     if True:
         poke_rangeindex = poke([('start','_start'), ('stop','_stop'), ('step','_step'), 'name'])
@@ -224,7 +224,7 @@ else:
             pass
         def peek_rangeindex(*args, **kwargs):
             attrs = peek_as_dict(*args, **kwargs)
-            return pandas.Int64Index( \
+            return pandas.Index( \
                 range( \
                     attrs.pop('_start', None), \
                     attrs.pop('_stop', None), \
