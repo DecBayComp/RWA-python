@@ -1,6 +1,6 @@
 #!/bin/sh
 
-versions="3.5 3.6 3.7 3.8 3.9 3.10 3.11"
+versions="3.5 3.6 3.7 3.8 3.9 3.10 3.11 3.12 3.13"
 #versions="3.6 2.7"
 
 if [ "$(pwd | rev | cut -d/ -f1 | rev)" = "tests" ]; then
@@ -17,12 +17,15 @@ fi
 if ! [ -f "$container" -o -h "$container" ]; then
     cd ../containers # if this crashes, $0 is not run from the tests directory as it should be
     echo "No container found; building one..."
-    if [ -z "$(which apptainer)" ]; then
+    if command -v apptainer &>/dev/null; then
+    echo "apptainer build rwa-openmpi-dev.sif rwa-jammy"
+    apptainer build rwa-openmpi-dev.sif rwa-jammy || exit
+    elif command -v singularity &>/dev/null; then
     echo "singularity build --fakeroot rwa-openmpi-dev.sif rwa-focal"
     singularity build --fakeroot rwa-openmpi-dev.sif rwa-focal || exit
     else
-    echo "apptainer build rwa-openmpi-dev.sif rwa-jammy"
-    apptainer build rwa-openmpi-dev.sif rwa-jammy || exit
+    echo "No Singularity-compatible container engines found; aborting"
+    exit 1
     fi
     echo "======================================"
     echo "Container ready; starting the tests..."
