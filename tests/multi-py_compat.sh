@@ -1,7 +1,6 @@
 #!/bin/sh
 
-versions="3.5 3.6 3.7 3.8 3.9 3.10 3.11 3.12 3.13"
-#versions="3.6 2.7"
+versions="3.7 3.8 3.9 3.10 3.11 3.12 3.13"
 
 if [ "$(pwd | rev | cut -d/ -f1 | rev)" = "tests" ]; then
     container="$(pwd)/../containers/rwa-openmpi-dev.sif"
@@ -20,12 +19,9 @@ if ! [ -f "$container" -o -h "$container" ]; then
     if command -v apptainer &>/dev/null; then
     echo "apptainer build rwa-openmpi-dev.sif rwa-jammy"
     apptainer build rwa-openmpi-dev.sif rwa-jammy || exit
-    elif command -v singularity &>/dev/null; then
+    else
     echo "singularity build --fakeroot rwa-openmpi-dev.sif rwa-focal"
     singularity build --fakeroot rwa-openmpi-dev.sif rwa-focal || exit
-    else
-    echo "No Singularity-compatible container engines found; aborting"
-    exit 1
     fi
     echo "======================================"
     echo "Container ready; starting the tests..."
@@ -33,9 +29,10 @@ if ! [ -f "$container" -o -h "$container" ]; then
     cd ../tests
 fi
 
-hdf5_file=$(mktemp) || exit
-poke_script=$(mktemp) || exit
-peek_script=$(mktemp) || exit
+tmpdir=$(mktemp -d -p .) || exit
+hdf5_file=$(mktemp -p $tmpdir) || exit
+poke_script=$(mktemp -p $tmpdir) || exit
+peek_script=$(mktemp -p $tmpdir) || exit
 
 trap "rm -f -- '$hdf_file' '$poke_script' '$peek_script'" EXIT
 
@@ -93,7 +90,7 @@ done
 done
 
 
-rm -f -- '$hdf_file' '$poke_script' '$peek_script'
+rm -rf -- '$tmpdir'
 trap - EXIT
 exit
 
