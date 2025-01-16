@@ -28,7 +28,7 @@ from .sequence import *
 def to_binary(s):
     if isinstance(s, six.text_type):
         s = s.encode('utf-8')
-    return numpy.string_(s)
+    return numpy.bytes_(s)
 
 if six.PY3:
     def from_unicode(s): return s
@@ -45,7 +45,7 @@ else:
     def from_bytes(b): return b
     to_str = str
 
-to_attr = numpy.string_
+to_attr = numpy.bytes_
 from_attr = from_bytes
 
 def native_poke(service, objname, obj, container, *args, **kargs):
