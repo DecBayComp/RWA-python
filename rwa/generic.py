@@ -1121,8 +1121,15 @@ else:
         pass
     numpy_basic_types.extend([
         numpy.float16, numpy.float32, numpy.float64,
-        numpy.complex_, numpy.complex64, numpy.complex128,
     ])
+    try:
+        numpy_basic_types.append(numpy.complex_)
+    except AttributeError:
+        pass
+    numpy_basic_types.extend([
+        numpy.complex64, numpy.complex128,
+    ])
+    numpy_basic_types = tuple(numpy_basic_types)
 
     # numpy.dtype
     numpy_storables = [\
