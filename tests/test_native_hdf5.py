@@ -44,7 +44,7 @@ class TestNativeTypes(object):
             for _type in store.store:
                 val = store.peek(_type)
                 # the assertion immediately below is redundant but helps debug when numpy hides its base types
-                assert not isinstance(val, (np.bool_, np.int_, np.float_))
+                assert not isinstance(val, (np.bool_, np.int_, np.float32, np.float64))
                 assert type(val) is type(value[_type])
         finally:
             store.close()
