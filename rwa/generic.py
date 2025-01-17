@@ -1110,13 +1110,26 @@ try:
 except ImportError:
     numpy_storables = []
 else:
-    numpy_basic_types = (
+    numpy_basic_types = [
         numpy.bool_, numpy.int_, numpy.intc, numpy.intp,
         numpy.int8, numpy.int16, numpy.int32, numpy.int64,
         numpy.uint8, numpy.uint16, numpy.uint32, numpy.uint64,
-        numpy.float_, numpy.float16, numpy.float32, numpy.float64,
-        numpy.complex_, numpy.complex64, numpy.complex128,
-        )
+    ]
+    try:
+        numpy_basic_types.append(numpy.float_)
+    except AttributeError:
+        pass
+    numpy_basic_types.extend([
+        numpy.float16, numpy.float32, numpy.float64,
+    ])
+    try:
+        numpy_basic_types.append(numpy.complex_)
+    except AttributeError:
+        pass
+    numpy_basic_types.extend([
+        numpy.complex64, numpy.complex128,
+    ])
+    numpy_basic_types = tuple(numpy_basic_types)
 
     # numpy.dtype
     numpy_storables = [\
