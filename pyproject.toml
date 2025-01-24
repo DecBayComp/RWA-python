@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "rwa-python"
-version = "0.9.4"
+version = "0.9.5"
 description = "HDF5-based serialization library for Python datatypes"
 authors = ["François Laurent <francois.laurent@pasteur.fr>"]
 license = "Apache 2.0"
