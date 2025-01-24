@@ -1,13 +1,14 @@
 [tool.poetry]
-name = "rwa"
-version = "0.9.4"
+name = "rwa-python"
+version = "0.9.5"
 description = "HDF5-based serialization library for Python datatypes"
 authors = ["François Laurent <francois.laurent@pasteur.fr>"]
 license = "Apache 2.0"
 readme = "README.md"
+packages = [{ include="rwa", from="." }]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.14"
+python = ">=3.8,<4.0"
 six = "^1.16.0"
 numpy = ">=0"
 scipy = ">=0"
