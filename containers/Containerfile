@@ -1,0 +1,126 @@
+FROM ubuntu:22.04
+
+COPY . /root/RWA-python
+
+ENV PYENV_ROOT=/root/.pyenv \
+    CC=mpicc \
+    HDF5_MPI="ON" \
+    HDF5_LIB=/usr/lib/x86_64-linux-gnu \
+    LC_ALL=C
+
+RUN cd /root/RWA-python \
+ && rm -rf .git .github .pytest_cache .venv containers dist doc tests .gitignore .readthedocs.yml meta.yaml poetry.lock pyproject.toml uv.lock rwa/__pycache__ \
+ && ls -a
+
+COPY <<"EOT" /bin/entrypoint
+#!/bin/bash
+python="python3"
+if [ -n "$1" ]; then
+  if [ "$1" = "-2" -o "$1" = "-27" ]; then
+    python="python2.7"
+    shift
+  elif [ "$1" = "-35" ]; then
+    python="/root/python3.5"
+    shift
+  elif [ "$1" = "-36" ]; then
+    python="/root/python3.6"
+    shift
+  elif [ "$1" = "-37" ]; then
+    python="python3.7"
+    shift
+  elif [ "$1" = "-38" ]; then
+    python="python3.8"
+    shift
+  elif [ "$1" = "-39" ]; then
+    python="python3.9"
+    shift
+  elif [ "$1" = "-3" -o "$1" = "-310" ]; then
+    python="python3.10"
+    shift
+  elif [ "$1" = "-311" ]; then
+    python="python3.11"
+    shift
+  elif [ "$1" = "-312" ]; then
+    python="python3.12"
+    shift
+  elif [ "$1" = "-313" ]; then
+    python="python3.13"
+    shift
+  elif [ "$1" = "-314" ]; then
+    python="python3.14"
+    shift
+  fi
+fi
+# echo "running: $python $@" >&2
+exec $python "$@"
+EOT
+
+RUN chmod +x /bin/entrypoint \
+ && ln -sf /usr/share/zoneinfo/Europe/Paris /etc/localtime \
+ && apt-get update  -y \
+ && apt-get install -y --no-install-recommends locales \
+ && locale-gen \
+ && apt-get install -y --no-install-recommends libhdf5-openmpi-dev \
+      build-essential git software-properties-common pkg-config \
+      gpg-agent wget curl libssl-dev zlib1g-dev libbz2-dev \
+      libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils \
+      tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
+ && curl -fsSL https://pyenv.run | bash \
+ && for ver in 3.5 3.6; do \
+      /root/.pyenv/bin/pyenv install $ver \
+ &&   echo -e "#!/bin/bash\nPYTHON=\$(ls /root/.pyenv/versions/$ver*/bin/python)\neval \"\$PYTHON \$@\"" >/root/python$ver \
+ &&   chmod +x /root/python$ver; \
+    done; \
+    add-apt-repository -y ppa:deadsnakes/ppa \
+ && apt-get update  -y \
+ && apt-get install -y --no-install-recommends \
+      python2.7 python2.7-dev \
+      python3.7 python3.7-dev python3.7-distutils \
+      python3.8 python3.8-dev python3.8-venv \
+      python3.9 python3.9-dev python3.9-distutils \
+      python3.10-dev python3.10-venv \
+      python3.11 python3.11-dev python3.11-venv \
+      python3.12 python3.12-dev python3.12-venv \
+      python3.13 python3.13-dev python3.13-venv \
+      python3.14 python3.14-dev python3.14-venv \
+ && for old in 2.7 3.5 3.6 3.7 3.8; do \
+      ([ -f /root/get-pip$old.py ] \
+ ||     wget -O /root/get-pip$old.py "https://bootstrap.pypa.io/pip/$old/get-pip.py") \
+ &&   (command -v python$old >/dev/null \
+ ||     python$old /root/get-pip$old.py --root-user-action=ignore); \
+    done; \
+    ([ -f /root/get-pip.py ] \
+ ||   wget -P /root/ -- 'https://bootstrap.pypa.io/get-pip.py') \
+ && for VER in 3.9 3.10 3.11 3.12 3.13 3.14; do \
+      python$VER /root/get-pip.py --root-user-action=ignore; \
+    done; \
+    (curr=`pwd`; cd "$HDF5_LIB"; ln -s libhdf5_openmpi.so libhdf5.so; cd "$curr") \
+ && cd /root/RWA-python \
+ && for version in 2.7 3.5 3.6 3.7 3.8 3.9 3.10 3.11 3.12 3.13 3.14; do \
+      python="python$version"; \
+      if [ "$version" = "2.7" ] || [ "$version" = "3.5" ] || [ "$version" = "3.6" ] || [ "$version" = "3.7" ] || \
+         [ "$version" = "3.8" ]; then \
+        python="/root/$python"; \
+	if [ ! -f "$python" ]; then continue; fi \
+      elif ! command -v $python >/dev/null; then continue; fi; \
+      pip="$python -m pip"; \
+      pip_install="$pip install --root-user-action=ignore -U"; \
+      if [ "$version" = "3.6" ] || [ "$version" = "3.7" ] || [ "$version" = "3.8" ] || [ "$version" = "3.9" ] || \
+         [ "$version" = "3.10" ] || [ "$version" = "3.11" ] || [ "$version" = "3.12" ] || [ "$version" = "3.13" ] || \
+	 [ "$version" = "3.14" ]; then \
+        $pip_install --force-reinstall setuptools; \
+        $pip_install pytest; \
+      fi; \
+      if [ "$version" = "3.8" ] || [ "$version" = "3.9" ] || [ "$version" = "3.10" ] || [ "$version" = "3.11" ] || \
+         [ "$version" = "3.12" ] || [ "$version" = "3.13" ] || [ "$version" = "3.14" ]; then \
+        $pip_install mpi4py; \
+      fi; \
+      $pip_install . -r requirements.txt; \
+      for pkg in scipy pandas; do \
+        if [ -z "$($pip show $pkg)" ]; then \
+          $pip_install $pkg; \
+        fi; \
+      done; \
+    done
+
+ENTRYPOINT ["/bin/entrypoint"]

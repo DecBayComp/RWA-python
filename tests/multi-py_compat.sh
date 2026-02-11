@@ -1,32 +1,39 @@
 #!/bin/sh
 
-versions="3.6 3.7 3.8 3.9 3.10 3.11 3.12 3.13"
+set -e
 
-if [ "$(pwd | rev | cut -d/ -f1 | rev)" = "tests" ]; then
-    container="$(pwd)/../containers/rwa-openmpi-dev.sif"
-elif [ -d "tests" ]; then
-    container="$(pwd)/containers/rwa-openmpi-dev.sif"
-    cd tests
-else
-    echo "Please run $0 in the tests directory"
-    exit 1
+versions="2.7 3.5 3.6 3.7 3.8 3.9 3.10 3.11 3.12 3.13 3.14"
+
+if [ -f "tests/multi-py_compat.sh" ]; then
+  cd tests
+elif ! [ -f "multi-py_compat.sh" ]; then
+  echo "Please run $0 in the tests directory" >&2
+  exit 1
 fi
+# clean up after failed test runs
+rm -rf tmp.*
 
-
-if ! [ -f "$container" -o -h "$container" ]; then
-    cd ../containers # if this crashes, $0 is not run from the tests directory as it should be
-    echo "No container found; building one..."
-    if command -v apptainer &>/dev/null; then
-    echo "apptainer build rwa-openmpi-dev.sif rwa-jammy"
-    apptainer build rwa-openmpi-dev.sif rwa-jammy || exit
-    else
-    echo "singularity build --fakeroot rwa-openmpi-dev.sif rwa-focal"
-    singularity build --fakeroot rwa-openmpi-dev.sif rwa-focal || exit
-    fi
-    echo "======================================"
-    echo "Container ready; starting the tests..."
-    echo "======================================"
-    cd ../tests
+if command -v podman >/dev/null; then
+  if [ -z "`podman images | grep localhost/rwa-python`" ]; then
+    podman build -t rwa-python -f ../containers/Containerfile ..
+  fi
+  run() {
+    local ver=$1 path=$2
+    shift 2
+    local file=`basename "$path"` dir=`dirname "$path"`
+    podman run -v "$dir":/data --security-opt label=disable --rm rwa-python "$ver" "/data/$file" "$@"
+  }
+elif command -v apptainer >/dev/null; then
+  container=`realpath ../containers/rwa-jammy.sif`
+  if [ ! -f "$container" ] && [ ! -h "$container" ]; then
+    (cd ../containers; apptainer build rwa-jammy.sif rwa-jammy)
+  fi
+  run() {
+    apptainer run $container "$@"
+  }
+else
+  echo "No container engines found" >&2
+  exit 1
 fi
 
 tmpdir=$(mktemp -d -p .) || exit
@@ -37,11 +44,14 @@ peek_script=$(mktemp -p $tmpdir) || exit
 trap "rm -f -- '$hdf_file' '$poke_script' '$peek_script'" EXIT
 
 cat <<EOT > $poke_script
+import os
+file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '`basename "$hdf5_file"`')
+
 from rwa import *
 from numpy.random import rand
 from scipy.spatial import *
 from pandas import Series
-store = HDF5Store('$hdf5_file', 'w')#, verbose=True)
+store = HDF5Store(file, 'w')#, verbose=True)
 
 store.poke('range', range(4))
 store.poke('delaunay', Delaunay(rand(5,2)))
@@ -53,8 +63,11 @@ store.close()
 EOT
 
 cat <<EOT > $peek_script
+import os
+file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '`basename "$hdf5_file"`')
+
 from rwa import *
-store = HDF5Store('$hdf5_file', 'r', verbose=True)
+store = HDF5Store(file, 'r', verbose=True)
 
 store.peek('range')
 store.peek('delaunay')
@@ -66,25 +79,32 @@ store.close()
 EOT
 
 
+i=0
 for poke_version in $versions; do
 
-poke_python="singularity run $container -$(echo $poke_version | cut -c1,3-)"
+i=$(( i + 1 ))
 
+poke_python="-$(echo $poke_version | cut -c1,3-)"
+
+j=0
 for peek_version in $versions; do
 
+j=$(( j + 1 ))
+[ $i -le $j ] || continue
+
 if [ "$poke_version" = "$peek_version" ]; then
-    continue
+  continue
 fi
 
-peek_python="singularity run $container -$(echo $peek_version | cut -c1,3-)"
+peek_python="-$(echo $peek_version | cut -c1,3-)"
 
-echo "----\n${poke_version}->${peek_version}\n----"
+echo -e "----\n${poke_version}->${peek_version}\n----"
 
-echo -n "poking with Python${poke_version}...\t"
-$poke_python $poke_script && echo "[ok]"
+echo -ne "poking with Python${poke_version}...\t"
+run $poke_python $poke_script && echo "[ok]"
 
-echo -n "peeking with Python${peek_version}...\t"
-$peek_python $peek_script && echo "[ok]"
+echo -ne "peeking with Python${peek_version}...\t"
+run $peek_python $peek_script && echo "[ok]"
 
 done
 done
