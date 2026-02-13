@@ -64,7 +64,7 @@ In addition, string typing is sometimes problematic. Non-ascii characters should
 Installation
 ------------
 
-Python >= 3.5 is required. **RWA-python** may still work with Python 2.7 but support has been dropped.
+Python >= 3.6 is required. **RWA-python** may still work with Python 2.7 and 3.5 but support has been dropped.
 
 Windows users should favor Conda for installing **RWA-python**, as Conda will seamlessly install the HDF5 standard library which is a required dependency.
 

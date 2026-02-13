@@ -2,7 +2,7 @@
 
 set -e
 
-versions="2.7 3.5 3.6 3.7 3.8 3.9 3.10 3.11 3.12 3.13 3.14"
+versions="3.6 3.7 3.8 3.9 3.10 3.11 3.12 3.13 3.14"
 
 if [ -f "tests/multi-py_compat.sh" ]; then
   cd tests
@@ -16,12 +16,16 @@ rm -rf tmp.*
 if command -v podman >/dev/null; then
   if [ -z "`podman images | grep localhost/rwa-python`" ]; then
     podman build -t rwa-python -f ../containers/Containerfile ..
+    podman build -t rwa-python:legacy -f ../containers/Containerfile-legacy ..
   fi
   run() {
-    local ver=$1 path=$2
+    local ver=$1 path=$2 tag=
     shift 2
     local file=`basename "$path"` dir=`dirname "$path"`
-    podman run -v "$dir":/data --security-opt label=disable --rm rwa-python "$ver" "/data/$file" "$@"
+    if [ "$ver" = "-27" ] || [ "$ver" = "-35" ] || [ "$ver" = "-36" ]; then
+      tag=":legacy"
+    fi
+    podman run -v "$dir":/data --security-opt label=disable --rm rwa-python$tag "$ver" "/data/$file" "$@"
   }
 elif command -v apptainer >/dev/null; then
   container=`realpath ../containers/rwa-jammy.sif`
