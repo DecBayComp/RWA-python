@@ -74,7 +74,6 @@ RUN chmod +x /bin/entrypoint \
     add-apt-repository -y ppa:deadsnakes/ppa \
  && apt-get update  -y \
  && apt-get install -y --no-install-recommends \
-      python2.7 python2.7-dev \
       python3.7 python3.7-dev python3.7-distutils \
       python3.8 python3.8-dev python3.8-venv \
       python3.9 python3.9-dev python3.9-distutils \
@@ -83,13 +82,7 @@ RUN chmod +x /bin/entrypoint \
       python3.12 python3.12-dev python3.12-venv \
       python3.13 python3.13-dev python3.13-venv \
       python3.14 python3.14-dev python3.14-venv \
- && for very_old in 2.7 3.5 3.6; do \
-      (command -v python$very_old >/dev/null \
- &&     ([ -f /root/get-pip$very_old.py ] \
- ||       wget -O /root/get-pip$very_old.py "https://bootstrap.pypa.io/pip/$very_old/get-pip.py") \
- &&     python$very_old /root/get-pip$very_old.py); \
-    done; \
-    for old in 3.7 3.8; do \
+ && for old in 3.7 3.8; do \
       (command -v python$old >/dev/null \
  &&     ([ -f /root/get-pip$old.py ] \
  ||       wget -O /root/get-pip$old.py "https://bootstrap.pypa.io/pip/$old/get-pip.py") \
@@ -106,13 +99,13 @@ RUN chmod +x /bin/entrypoint \
       python="python$version"; \
       if [ "$version" = "2.7" ] || [ "$version" = "3.5" ] || [ "$version" = "3.6" ]; then \
         python="/root/$python"; \
-	if [ ! -f "$python" ]; then continue; fi \
+        if [ ! -f "$python" ]; then continue; fi \
       elif ! command -v $python >/dev/null; then continue; fi; \
       pip="$python -m pip"; \
       pip_install="$pip install --root-user-action=ignore -U"; \
       if [ "$version" = "3.6" ] || [ "$version" = "3.7" ] || [ "$version" = "3.8" ] || [ "$version" = "3.9" ] || \
          [ "$version" = "3.10" ] || [ "$version" = "3.11" ] || [ "$version" = "3.12" ] || [ "$version" = "3.13" ] || \
-	 [ "$version" = "3.14" ]; then \
+         [ "$version" = "3.14" ]; then \
         $pip_install --force-reinstall setuptools; \
         $pip_install pytest; \
       fi; \
