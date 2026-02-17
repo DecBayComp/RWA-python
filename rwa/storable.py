@@ -306,6 +306,15 @@ class StorableService(object):
             self.by_python_type[storable.python_type] = existing
         self.by_storable_type[storable.storable_type] = existing
 
+    def registerAlias(self, existing_key, alias):
+        if existing_key in self.by_storable_type.keys():
+            if alias in self.by_storable_type.keys():
+                raise KeyError('storable type already registered', alias)
+            else:
+                self.by_storable_type[alias] = self.by_storable_type[existing_key]
+        else:
+            raise KeyError('storable type not found', existing_key)
+
     def byPythonType(self, t, istype=False):
         if istype:#isinstance(t, type):
             try:

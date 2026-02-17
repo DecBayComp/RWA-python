@@ -16,6 +16,7 @@ try:
     import pandas
 except ImportError:
     pandas_storables = []
+    pandas_aliases = []
 else:
     rwa_params['pandas.index.force_unicode']   = True
     rwa_params['pandas.columns.force_unicode'] = True
@@ -336,8 +337,12 @@ else:
         return df
 
     pandas_storables += [ \
-        Storable(pandas.Series, handlers=StorableHandler(poke=poke_series, peek=peek_series)), \
+        Storable(pandas.Series, \
+            key='Python.pandas.core.series.Series', \
+            handlers=StorableHandler(poke=poke_series, peek=peek_series)), \
         Storable(pandas.DataFrame, \
             handlers=StorableHandler(poke=poke_dataframe, peek=peek_dataframe, \
                 peek_option='pandas.columns.force_unicode'))]
+
+    pandas_aliases = [('Python.pandas.core.series.Series', 'Python.pandas.Series')]
 

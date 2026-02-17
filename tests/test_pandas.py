@@ -129,7 +129,7 @@ class TestPandasTypes(object):
                 categories=['c', 'b', 'a'])}
         if _test_categoricaldtype:
             data['series_with_categories'] = Series(['a', 'b', 'a', 'c'], dtype=\
-                CategoricalDtype(categories=['b', 'a'], ordered=True))
+                CategoricalDtype(categories=['c', 'b', 'a'], ordered=True))
         # write
         store = HDF5Store(test_file, 'w')
         try:

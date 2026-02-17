@@ -266,12 +266,16 @@ hdf5_storables = list(itertools.chain(\
     spatial_storables, \
     pandas_storables))
 
+hdf5_aliases = pandas_aliases
 
 
 # global variable
 hdf5_service = StorableService(rwa_params)
 for s in hdf5_storables:
     hdf5_service.registerStorable(s)
+
+for s in hdf5_aliases:
+    hdf5_service.registerAlias(*s)
 
 def hdf5_storable(type_or_storable, *args, **kwargs):
     '''Registers a `Storable` instance in the global service.'''
