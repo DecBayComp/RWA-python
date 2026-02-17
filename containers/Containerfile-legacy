@@ -110,7 +110,7 @@ RUN chmod +x /bin/entrypoint \
          [ "$version" = "3.12" ] || [ "$version" = "3.13" ] || [ "$version" = "3.14" ]; then \
         $pip_install mpi4py; \
       fi; \
-      $pip_install . -r requirements.txt; \
+      $pip_install . -r six h5py; \
       for pkg in scipy pandas; do \
         if [ -z "$($pip show $pkg)" ]; then \
           $pip_install $pkg; \

@@ -1,6 +1,0 @@
-six
-#numpy
-#scipy
-#pandas
-#tables
-h5py
